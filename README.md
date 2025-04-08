@@ -1,7 +1,8 @@
 **Steganography Tool**
 
 This project is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining adaptive LSB and DCT-based methods to hide secret messages within images. It also offers optional AES encryption to secure the hidden message. The tool preserves image quality and metadata—such as EXIF data—allowing the final file to retain important information from the original image.
-Motivation
+
+**Motivation**
 
 The project was initiated last week, inspired by a discussion on LinkedIn with Santeri Kallios. While C2PA markings provide a robust way to authenticate AI-generated images, I believed that the potential to hide additional information—such as secret messages, digital watermarks, or provenance data—in images is much greater. This tool demonstrates that hidden data can be seamlessly integrated into images without noticeably affecting their quality.
 Features
