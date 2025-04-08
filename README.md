@@ -1,4 +1,4 @@
-Steganography Tool
+**Steganography Tool**
 
 This project is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining adaptive LSB and DCT-based methods to hide secret messages within images. It also offers optional AES encryption to secure the hidden message. The tool preserves image quality and metadata—such as EXIF data—allowing the final file to retain important information from the original image.
 Motivation
@@ -48,8 +48,8 @@ Installation
 
     Clone the repository:
 
-git clone https://github.com/yourusername/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/divergentti/steganography.git
+cd steganography
 
 Create a virtual environment (optional but recommended):
 
