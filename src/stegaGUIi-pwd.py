@@ -49,7 +49,7 @@ from Crypto.Util.Padding import pad, unpad
 
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False # Set to False in production for speed
-debug_embed = False  # Set to False in production for speed
+debug_embed = True  # Set to False in production for speed
 debug_gui = False  # Set to False in production for speed
 
 # Number of worker threads for parallel processing
@@ -190,7 +190,7 @@ class StegaMachine:
                 for i in range(3):  # RGB channels
                     # Clear LSBs based on capacity
                     mask = (1 << capacity) - 1
-                    pixel[i] &= ~mask
+                    pixel[i] &= (0xFF ^ mask)
 
                     # Get bits to embed (as many as capacity allows)
                     bits_to_embed = 0
