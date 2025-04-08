@@ -499,7 +499,7 @@ class StegaMachine:
 
             # Read Exif (cv2 do not support it)
             with Image.open(image_path) as img:
-                exif_data = img.info.get('exif')
+                exif_data = img.getexif().tobytes() if hasattr(img, 'getexif') else None
 
             # Load image with OpenCV for better performance
             cv_img = cv2.imread(abs_path)
@@ -579,16 +579,14 @@ class StegaMachine:
 
                 # High-quality conversion for JPEG
                 if original_ext in ('.jpg', '.jpeg'):
-                    Image.open(temp_png_path).save(
-                        final_path,
-                        format='JPEG',
-                        quality=95,  # Minimize compression artifacts
-                        subsampling=0,  # 4:4:4 chroma (no subsampling)
-                        exif = exif_data # keep exif_data
-                    )
-                # Lossless conversion for other formats (BMP, etc.)
-                else:
-                    Image.open(temp_png_path).save(final_path, format=original_ext[1:].upper())
+                    save_args = {
+                        'format': 'JPEG',
+                        'quality': 95,
+                        'subsampling': 0,
+                    }
+                    if exif_data is not None:
+                        save_args['exif'] = exif_data
+                    Image.open(temp_png_path).save(final_path, **save_args)
 
                 os.remove(temp_png_path)  # Clean up temporary PNG
                 if progress_callback:
@@ -844,32 +842,41 @@ class MainWindow(QMainWindow):
             self.update_preview(path)
 
     def update_preview(self, path):
-        pixmap = QPixmap(path)
-        if not pixmap.isNull():
-            scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
-            self.preview_label.setPixmap(scaled)
+
+        if os.path.isfile(path):
+            pixmap = QPixmap(path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
+                self.preview_label.setPixmap(scaled)
+
+                try:
+                    size_bytes = os.path.getsize(path)
+                    size_kb = size_bytes / 1024
+                    self.file_size_label.setText(f"Size: {size_kb:.2f} KB")
+
+                    file_ext = os.path.splitext(path)[1].upper().replace('.', '') or 'Unknown'
+                    self.file_type_label.setText(f"Type: {file_ext}")
+                except Exception as e:
+                    self.file_size_label.setText("Size: Error")
+                    self.file_type_label.setText("Type: Error")
+            else:
+                self.preview_label.clear()
+                self.file_size_label.setText("Size: N/A")
+                self.file_type_label.setText("Type: N/A")
 
             try:
-                size_bytes = os.path.getsize(path)
-                size_kb = size_bytes / 1024
-                self.file_size_label.setText(f"Size: {size_kb:.2f} KB")
-
-                file_ext = os.path.splitext(path)[1].upper().replace('.', '') or 'Unknown'
-                self.file_type_label.setText(f"Type: {file_ext}")
+                with Image.open(path) as img:
+                    exif_info = self.get_exif_data(img)
+                    self.exif_text.setPlainText(exif_info)
             except Exception as e:
-                self.file_size_label.setText("Size: Error")
-                self.file_type_label.setText("Type: Error")
+                self.exif_text.setPlainText(f"Error loading EXIF: {str(e)}")
+
         else:
             self.preview_label.clear()
-            self.file_size_label.setText("Size: N/A")
-            self.file_type_label.setText("Type: N/A")
-
-        try:
-            with Image.open(path) as img:
-                exif_info = self.get_exif_data(img)
-                self.exif_text.setPlainText(exif_info)
-        except Exception as e:
-            self.exif_text.setPlainText(f"Error loading EXIF: {str(e)}")
+            self.file_size_label.setText("Size: N/A (Directory)")
+            self.file_type_label.setText("Type: Directory")
+            self.exif_text.setPlainText("No EXIF data for directories.")
+            return
 
     def get_exif_data(self, image):
         try:
@@ -903,7 +910,9 @@ class MainWindow(QMainWindow):
             return
 
         if os.path.isdir(path):
-            worker = Worker(self.process_folder, path, self.message_input.text())
+            password = self.password_edit.text() or None if self.encrypt_checkbox.isChecked() else None
+            worker = Worker(self.process_folder, path, self.message_input.text(), password)
+
             worker.signals.progress.connect(self.progress_bar.setValue)
             worker.signals.result.connect(
                 lambda msg: self.status_bar.showMessage(msg)
@@ -1016,7 +1025,7 @@ class MainWindow(QMainWindow):
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
 
-    def process_folder(self, folder_path, message, progress_callback=None):
+    def process_folder(self, folder_path, message, password=None, progress_callback=None):
         supported_ext = ('.png', '.jpg', '.jpeg', '.bmp')
         files = []
         for root, _, filenames in os.walk(folder_path):
@@ -1027,7 +1036,8 @@ class MainWindow(QMainWindow):
         total = len(files)
         for i, file_path in enumerate(files):
             try:
-                machine.hybrid_embed_message(file_path, message)
+                # Now passing password to hybrid_embed_message
+                machine.hybrid_embed_message(file_path, message, password)
                 if progress_callback:
                     progress_callback(int((i + 1) / total * 100))
             except Exception as e:
