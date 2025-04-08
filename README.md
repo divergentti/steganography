@@ -5,8 +5,8 @@ This project is a cross-platform (Windows and Linux) GUI steganography tool that
 **Motivation**
 
 The project was initiated last week, inspired by a discussion on LinkedIn with Santeri Kallios. While C2PA markings provide a robust way to authenticate AI-generated images, I believed that the potential to hide additional information—such as secret messages, digital watermarks, or provenance data—in images is much greater. This tool demonstrates that hidden data can be seamlessly integrated into images without noticeably affecting their quality.
-Features
 
+**Features**
 
 Hybrid Embedding Techniques:
     Adaptive LSB: Uses an adaptive algorithm to choose the number of least significant bits based on local image complexity.
@@ -24,8 +24,7 @@ GUI Application:
 Cross-Platform Compatibility:
     Designed for Windows and Linux, with plans for future distro packages.
 
-
-** Requirements **
+**Requirements**
 
 Python 3.8 or higher
 PyQt6
@@ -35,7 +34,7 @@ NumPy
 SciPy
 PyCryptodome
 
-** Installation if using source code **
+**Installation if using source code**
 
 1. Clone the repository: git clone https://github.com/divergentti/steganography.git
 cd steganography
@@ -44,7 +43,9 @@ cd steganography
 4. source venv/bin/activate  # On Windows: venv\Scripts\activate
 5. Install the required packages: pip install -r requirements.txt
 
-** Usage **
+The source code is commented and with options to enable debugging.
+
+**Usage**
 
 Run the main application file: python stegaGUI-pwd.py
 The GUI offers two modes:
@@ -62,23 +63,19 @@ Decrypt:
 
 The tool processes the image by embedding the message (including a checksum for integrity) and preserves any EXIF metadata from the original file.
 
-** Future Work **
+**Future Work**
 
 Distribution Packaging:
     Creating standalone packages for Windows and Linux to simplify installation for end-users.
     Enhanced Format Support: improvements to handle more image formats and additional metadata (if required).
     Performance Optimizations: ongoing improvements to the embedding/extraction process for speed and accuracy.
 
-** Contributing **
-
+**Contributing**
 Contributions are welcome! Feel free to fork the repository and submit pull requests. Please open an issue first to discuss changes you’d like to see.
 
-** License **
-
+**License**
 This project is licensed under the MIT License.
 
-** Acknowledgments **
-
+**Acknowledgments**
 Santeri Kallio: A special thanks for sparking the idea on LinkedIn with his post on using C2PA markings for AI-generated images.
-
 Open Source Libraries: Thanks to the developers of PyQt6, Pillow, OpenCV, NumPy, SciPy, and PyCryptodome for making this project possible.
