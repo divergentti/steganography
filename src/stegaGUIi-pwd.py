@@ -54,7 +54,7 @@ debug_gui = False  # Set to False in production for speed
 
 # Number of worker threads for parallel processing
 NUM_WORKERS = max(1, os.cpu_count() - 1)  # Leave one core free for system
-VERSION = "0.0.2 - 08.04.2025"
+VERSION = "0.0.3 - 08.04.2025"
 
 
 class WorkerSignals(QObject):
@@ -685,7 +685,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Steganography Tool version: " +VERSION)
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 800, 550)
         self.setup_ui()
         self.create_menu()
 
@@ -694,7 +694,10 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
 
-        # Mode selection
+        # Mode and Input Type in same row
+        mode_input_row = QHBoxLayout()
+
+        # Operation Mode
         self.mode_group = QGroupBox("Operation Mode")
         mode_layout = QHBoxLayout()
         self.encrypt_radio = QRadioButton("Encrypt")
@@ -703,9 +706,9 @@ class MainWindow(QMainWindow):
         mode_layout.addWidget(self.encrypt_radio)
         mode_layout.addWidget(self.decrypt_radio)
         self.mode_group.setLayout(mode_layout)
-        layout.addWidget(self.mode_group)
+        mode_input_row.addWidget(self.mode_group)
 
-        # Input type selection
+        # Input Type
         self.input_type_group = QGroupBox("Input Type")
         input_type_layout = QHBoxLayout()
         self.file_radio = QRadioButton("File")
@@ -714,7 +717,9 @@ class MainWindow(QMainWindow):
         input_type_layout.addWidget(self.file_radio)
         input_type_layout.addWidget(self.folder_radio)
         self.input_type_group.setLayout(input_type_layout)
-        layout.addWidget(self.input_type_group)
+        mode_input_row.addWidget(self.input_type_group)
+
+        layout.addLayout(mode_input_row)
 
         # Path selection
         path_layout = QHBoxLayout()
@@ -730,23 +735,32 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.message_label)
         layout.addWidget(self.message_input)
 
+        # Password row
+        password_layout = QHBoxLayout()
+        self.encrypt_checkbox = QCheckBox("Enable AES Encryption")
+        self.password_edit = QLineEdit()
+        self.password_edit.setPlaceholderText("Password (optional)")
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        password_layout.addWidget(self.encrypt_checkbox)
+        password_layout.addWidget(self.password_edit)
+        layout.addLayout(password_layout)
+
         # Action button
         self.action_btn = QPushButton("Encrypt")
         layout.addWidget(self.action_btn)
 
-        # Preview area - modified with file info
+        # Preview area
         preview_layout = QHBoxLayout()
 
-        # Image preview (left side)
+        # Image preview
         self.preview_label = QLabel()
-        self.preview_label.setFixedSize(400, 400)
+        self.preview_label.setFixedSize(300, 300)  # Reduced size
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.preview_label)
 
-        # Right side container (file info + EXIF)
-        right_layout = QVBoxLayout()
+        # File info and EXIF
+        right_panel = QVBoxLayout()
 
-        # File information group
         file_info_group = QGroupBox("File Information")
         file_info_layout = QVBoxLayout()
         self.file_size_label = QLabel("Size: N/A")
@@ -754,51 +768,33 @@ class MainWindow(QMainWindow):
         file_info_layout.addWidget(self.file_size_label)
         file_info_layout.addWidget(self.file_type_label)
         file_info_group.setLayout(file_info_layout)
-        right_layout.addWidget(file_info_group)
+        right_panel.addWidget(file_info_group)
 
-        # EXIF data (existing)
         self.exif_text = QTextEdit()
         self.exif_text.setReadOnly(True)
-        right_layout.addWidget(self.exif_text)
+        right_panel.addWidget(self.exif_text)
 
-        preview_layout.addLayout(right_layout)
+        preview_layout.addLayout(right_panel)
         layout.addLayout(preview_layout)
 
-        # Password
-        self.encrypt_checkbox = QCheckBox("Enable AES Encryption")
-        self.password_edit = QLineEdit()
-        self.password_edit.setPlaceholderText("Optional password")
-        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password_label = QLabel("Password:")
-
-        layout.addWidget(self.encrypt_checkbox)
-        layout.addWidget(self.password_label)
-        layout.addWidget(self.password_edit)
-
-        # Ensure the password field is initially disabled
-        self.password_edit.setEnabled(False)
-
-        # Connect the checkbox state change to enable/disable the password field
-        self.encrypt_checkbox.stateChanged.connect(self.toggle_password_field)
+        # Progress
+        self.progress_label = QLabel("Ready")
+        layout.addWidget(self.progress_label)
+        self.progress_bar = QProgressBar()
+        layout.addWidget(self.progress_bar)
 
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
 
-        # Connect signals
+        # Connections
         self.encrypt_radio.toggled.connect(self.update_ui_mode)
         self.browse_btn.clicked.connect(self.handle_browse)
         self.action_btn.clicked.connect(self.handle_action)
         self.file_radio.toggled.connect(self.update_path_field)
+        self.encrypt_checkbox.stateChanged.connect(self.toggle_password_field)
 
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setTextVisible(True)
-        # Add under progress bar setup
-        self.progress_label = QLabel("Ready")
-        layout.insertWidget(6, self.progress_label)
-        layout.addWidget(self.progress_bar)
-        self.threadpool = QThreadPool()  # Initialize thread pool
+        self.threadpool = QThreadPool()
 
     def create_menu(self):
         menu_bar = self.menuBar()
@@ -807,61 +803,45 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self.show_help)
 
     def toggle_password_field(self, state):
-        # Enable or disable the password field based on the checkbox state
-        is_checked = self.encrypt_checkbox.isChecked()
-        self.password_edit.setEnabled(is_checked)
-        if debug_gui:
-            print(
-                f"Checkbox state: {self.encrypt_checkbox.checkState().value}, "
-                f"Password field enabled: {self.password_edit.isEnabled()}, is_checked: {is_checked}")
+        self.password_edit.setEnabled(self.encrypt_checkbox.isChecked())
 
     def update_ui_mode(self, checked):
-        if checked:  # Selected
-            self.action_btn.setText("Encrypt")
-            self.message_label.show()
-            self.message_input.show()
-            self.input_type_group.show()
-            self.encrypt_checkbox.show()
-            self.password_label.show()
-            self.password_edit.show()
-        else:  # Not selected
-            self.action_btn.setText("Decrypt")
-            self.message_label.hide()
-            self.message_input.hide()
-            self.input_type_group.hide()
-            self.file_radio.setChecked(True)
-            self.encrypt_checkbox.show()
-            self.password_label.show()
-            self.password_edit.show()
+        is_encrypt = self.encrypt_radio.isChecked()
+        self.action_btn.setText("Encrypt" if is_encrypt else "Decrypt")
+        self.message_label.setVisible(is_encrypt)
+        self.message_input.setVisible(is_encrypt)
+        self.input_type_group.setVisible(is_encrypt)
 
     def update_path_field(self):
-        if self.file_radio.isChecked():
-            self.path_edit.setPlaceholderText("Select file...")
-        else:
-            self.path_edit.setPlaceholderText("Select folder...")
+        self.path_edit.setPlaceholderText(
+            "Select file..." if self.file_radio.isChecked()
+            else "Select folder..."
+        )
 
     def handle_browse(self):
-        filters = "Images (*.png *.jpg *.jpeg *.bmp *.PNG *.JPG *.JPEG *.BMP)"
-        if self.encrypt_radio.isChecked():
-            if self.file_radio.isChecked():
-                path, _ = QFileDialog.getOpenFileName(
-                    self, "Select Image", "", filters)
-            else:
-                path = QFileDialog.getExistingDirectory(self, "Select Folder")
+        if self.encrypt_radio.isChecked() and self.folder_radio.isChecked():
+            path = QFileDialog.getExistingDirectory(self, "Select Folder")
         else:
+            filters = "Images (*.png *.jpg *.jpeg *.bmp)"
             path, _ = QFileDialog.getOpenFileName(
-                self, "Select Image", "", filters)
+                self,
+                "Select Image",
+                "",
+                filters
+            )
 
         if path:
-            ext = os.path.splitext(path)[1].lower()
-            if ext not in ['.png', '.jpg', '.jpeg', '.bmp']:
-                QMessageBox.warning(self, "Unsupported file type", f"Supported filetypes: {filters}")
-                return
+            # Only validate extension for files
+            if os.path.isfile(path):
+                ext = os.path.splitext(path)[1].lower()
+                if ext not in ['.png', '.jpg', '.jpeg', '.bmp']:
+                    QMessageBox.warning(self,
+                        "Unsupported File Type",
+                        "Please select an image file (PNG, JPG, JPEG, BMP)"
+                    )
+                    return
             self.path_edit.setText(path)
-            if self.encrypt_radio.isChecked() and self.file_radio.isChecked():
-                self.update_preview(path)
-            elif self.decrypt_radio.isChecked():
-                self.update_preview(path)
+            self.update_preview(path)
 
     def update_preview(self, path):
         pixmap = QPixmap(path)
@@ -918,15 +898,29 @@ class MainWindow(QMainWindow):
 
     def handle_encrypt(self):
         path = self.path_edit.text()
-        message = self.message_input.text()
-        password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
-
         if not path:
-            self.status_bar.showMessage("Please select an input file or folder!")
+            self.status_bar.showMessage("Please select input path!")
             return
-        if not message:
-            self.status_bar.showMessage("Message is required!")
-            return
+
+        if os.path.isdir(path):
+            worker = Worker(self.process_folder, path, self.message_input.text())
+            worker.signals.progress.connect(self.progress_bar.setValue)
+            worker.signals.result.connect(
+                lambda msg: self.status_bar.showMessage(msg)
+            )
+            worker.signals.finished.connect(
+                lambda: self.action_btn.setEnabled(True)
+            )
+            self.threadpool.start(worker)
+        else:
+            # Existing single-file handling
+            worker = Worker(
+                machine.hybrid_embed_message,
+                path,
+                self.message_input.text(),
+                self.password_edit.text() or None
+            )
+
 
         self.action_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -960,11 +954,7 @@ class MainWindow(QMainWindow):
             self.action_btn.setEnabled(True)
             QMessageBox.critical(self, "Error", str(e))
 
-        worker = Worker(
-            lambda: machine.hybrid_embed_message(
-                path, message, password, progress_callback=on_progress
-            )
-        )
+
         worker.signals.result.connect(on_result)
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
@@ -1026,23 +1016,24 @@ class MainWindow(QMainWindow):
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
 
-    def process_folder(self, folder_path, message):
+    def process_folder(self, folder_path, message, progress_callback=None):
         supported_ext = ('.png', '.jpg', '.jpeg', '.bmp')
-        count = 0
+        files = []
+        for root, _, filenames in os.walk(folder_path):
+            for f in filenames:
+                if f.lower().endswith(supported_ext):
+                    files.append(os.path.join(root, f))
 
-        for root, _, files in os.walk(folder_path):
-            for file in files:
-                if file.lower().endswith(supported_ext):
-                    file_path = os.path.join(root, file)
-                    try:
-                        base_name = os.path.splitext(file)[0]
-                        output_path = os.path.join(root, f"encrypted_{base_name}.png")
-                        machine.hybrid_embed_message(file_path, message)
-                        count += 1
-                    except Exception as e:
-                        print(f"Error processing {file}: {str(e)}")
+        total = len(files)
+        for i, file_path in enumerate(files):
+            try:
+                machine.hybrid_embed_message(file_path, message)
+                if progress_callback:
+                    progress_callback(int((i + 1) / total * 100))
+            except Exception as e:
+                print(f"Error processing {file_path}: {str(e)}")
 
-        self.status_bar.showMessage(f"Processed {count} files successfully")
+        return f"Processed {len(files)} files successfully"
 
     def show_help(self):
         help_text = """Steganography Tool Help
