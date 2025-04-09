@@ -47,12 +47,13 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 
 debug_extract = False  # Set to False in production for speed
-debug_crypto = False # Set to False in production for speed
-debug_embed = False  # Set to False in production for speed
+debug_crypto = False  # Set to False in production for speed
+debug_embed = True  # Set to False in production for speed
 debug_gui = True  # Set to False in production for speed
 
 if debug_gui or debug_embed or debug_extract or debug_crypto:
     import faulthandler
+
     faulthandler.enable()
 
 # Number of worker threads for parallel processing
@@ -689,7 +690,7 @@ class MainWindow(QMainWindow):
     def __init__(self, stego_machine):
         super().__init__()
         self.stego = stego_machine
-        self.setWindowTitle("Steganography Tool version: " +VERSION)
+        self.setWindowTitle("Steganography Tool version: " + VERSION)
         self.setGeometry(100, 100, 800, 550)
         self.setup_ui()
         self.create_menu()
@@ -759,7 +760,7 @@ class MainWindow(QMainWindow):
 
         # Image preview
         self.preview_label = QLabel()
-        self.preview_label.setFixedSize(300, 300)  # Reduced size
+        self.preview_label.setFixedSize(300, 300)
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(self.preview_label)
 
@@ -874,9 +875,9 @@ class MainWindow(QMainWindow):
                 ext = os.path.splitext(path)[1].lower()
                 if ext not in ['.png', '.jpg', '.jpeg', '.bmp']:
                     QMessageBox.warning(self,
-                        "Unsupported File Type",
-                        "Please select an image file (PNG, JPG, JPEG, BMP)"
-                    )
+                                        "Unsupported File Type",
+                                        "Please select an image file (PNG, JPG, JPEG, BMP)"
+                                        )
                     return
             self.path_edit.setText(path)
             self.update_preview(path)
@@ -890,6 +891,7 @@ class MainWindow(QMainWindow):
                         # Create a temporary painter to ensure clean scaling
                         scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
                         self.preview_label.setPixmap(scaled)
+
                 finally:
                     # Explicit cleanup (not strictly necessary for QPixmap but good practice)
                     del pixmap
@@ -967,6 +969,9 @@ class MainWindow(QMainWindow):
         self.action_btn.setEnabled(False)
         self.progress_bar.setValue(0)
 
+        is_folder = os.path.isdir(path)
+        target_method = self.process_folder if is_folder else machine.hybrid_embed_message
+
         def on_progress(percent):
 
             phases = {
@@ -993,21 +998,23 @@ class MainWindow(QMainWindow):
                 self.update_preview(output_path)
                 QMessageBox.information(self, "Success",
                                         f"Saved to {output_path}")
+            if is_folder:
+                QMessageBox.information(self, "Success", output_path)
 
         def on_error(e):
             self.action_btn.setEnabled(True)
             QMessageBox.critical(self, "Error", str(e))
 
-        worker = Worker(
-            lambda: machine.hybrid_embed_message(
-                path, message, password, progress_callback=on_progress
-            )
-        )
+        if is_folder:
+            worker = Worker(lambda: self.process_folder(path, message, password, progress_callback=on_progress))
+        else:
+            worker = Worker(
+                lambda: machine.hybrid_embed_message(path, message, password, progress_callback=on_progress))
+
         worker.signals.result.connect(on_result)
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
-
 
     def handle_decrypt(self):
         self.progress_bar.setValue(0)
@@ -1082,16 +1089,21 @@ class MainWindow(QMainWindow):
     def process_folder(self, folder_path, message, password=None, progress_callback=None):
         supported_ext = ('.png', '.jpg', '.jpeg', '.bmp')
         files = []
+        folder_path = os.path.abspath(folder_path)
+
         for root, _, filenames in os.walk(folder_path):
             for f in filenames:
                 if f.lower().endswith(supported_ext):
-                    files.append(os.path.join(root, f))
+                    full_path = os.path.join(root, f)
+                    resolved_path = os.path.realpath(full_path)
+                    if os.path.isfile(resolved_path):
+                        files.append(full_path)
 
         total = len(files)
         for i, file_path in enumerate(files):
             try:
-                # Now passing password to hybrid_embed_message
-                machine.hybrid_embed_message(file_path, message, password)
+                abs_path = os.path.abspath(file_path)
+                machine.hybrid_embed_message(abs_path, message, password)
                 if progress_callback:
                     progress_callback(int((i + 1) / total * 100))
             except Exception as e:
@@ -1101,7 +1113,7 @@ class MainWindow(QMainWindow):
 
     def show_help(self):
         help_text = """Steganography Tool Help
-        
+
 This tool will embed or extract message. New file will be
 named encrypted_[original filename]. Process will always save png file
 temporarily and convert file to jpg, jpeg or bmp if needed. This way
@@ -1136,6 +1148,7 @@ Small messages work well; larger ones risk visible distortions (1 bit ≈ 1 pixe
 Used methods: Adaptive LSB Modification and DCT-based Steganography, hybrid method.
 """
         QMessageBox.information(self, "Help", help_text)
+
 
 if __name__ == "__main__":
     machine = StegaMachine()
