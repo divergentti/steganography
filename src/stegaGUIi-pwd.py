@@ -49,12 +49,12 @@ from Crypto.Util.Padding import pad, unpad
 
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False # Set to False in production for speed
-debug_embed = True  # Set to False in production for speed
-debug_gui = False  # Set to False in production for speed
+debug_embed = False  # Set to False in production for speed
+debug_gui = True  # Set to False in production for speed
 
 # Number of worker threads for parallel processing
 NUM_WORKERS = max(1, os.cpu_count() - 1)  # Leave one core free for system
-VERSION = "0.0.3 - 08.04.2025"
+VERSION = "0.0.4 - 09.04.2025"
 
 
 class WorkerSignals(QObject):
@@ -680,8 +680,9 @@ class StegaMachine:
 
 # ------------------------------------- The GUI part
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, stego_machine):
         super().__init__()
+        self.stego = stego_machine
         self.setWindowTitle("Steganography Tool version: " +VERSION)
         self.setGeometry(100, 100, 800, 550)
         self.setup_ui()
@@ -791,8 +792,21 @@ class MainWindow(QMainWindow):
         self.action_btn.clicked.connect(self.handle_action)
         self.file_radio.toggled.connect(self.update_path_field)
         self.encrypt_checkbox.stateChanged.connect(self.toggle_password_field)
-
         self.threadpool = QThreadPool()
+
+    def set_error_bar_style(self):
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid grey;
+                border-radius: 5px;
+                text-align: center;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: red;
+                border-radius: 5px;
+            }
+        """)
 
     def create_menu(self):
         menu_bar = self.menuBar()
@@ -882,7 +896,7 @@ class MainWindow(QMainWindow):
         try:
             exif_data = image.getexif()
             if not exif_data:
-                return "No EXIF data found"
+                return "No EXIF data found (PNG file?)"
 
             exif_info = []
             for tag_id, value in exif_data.items():
@@ -890,6 +904,7 @@ class MainWindow(QMainWindow):
                 exif_info.append(f"{tag_name}: {value}")
             return "\n".join(exif_info)
         except Exception as e:
+            self.status_bar.showMessage(f"EXIF Error: {str(e)}")
             return f"EXIF Error: {str(e)}"
 
     def handle_action(self):
@@ -905,31 +920,15 @@ class MainWindow(QMainWindow):
 
     def handle_encrypt(self):
         path = self.path_edit.text()
+        message = self.message_input.text()
+        password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
+
         if not path:
-            self.status_bar.showMessage("Please select input path!")
+            self.status_bar.showMessage("Please select an input file or folder!")
             return
-
-        if os.path.isdir(path):
-            password = self.password_edit.text() or None if self.encrypt_checkbox.isChecked() else None
-            worker = Worker(self.process_folder, path, self.message_input.text(), password)
-
-            worker.signals.progress.connect(self.progress_bar.setValue)
-            worker.signals.result.connect(
-                lambda msg: self.status_bar.showMessage(msg)
-            )
-            worker.signals.finished.connect(
-                lambda: self.action_btn.setEnabled(True)
-            )
-            self.threadpool.start(worker)
-        else:
-            # Existing single-file handling
-            worker = Worker(
-                machine.hybrid_embed_message,
-                path,
-                self.message_input.text(),
-                self.password_edit.text() or None
-            )
-
+        if not message:
+            self.status_bar.showMessage("Message is required!")
+            return
 
         self.action_btn.setEnabled(False)
         self.progress_bar.setValue(0)
@@ -963,13 +962,19 @@ class MainWindow(QMainWindow):
             self.action_btn.setEnabled(True)
             QMessageBox.critical(self, "Error", str(e))
 
-
+        worker = Worker(
+            lambda: machine.hybrid_embed_message(
+                path, message, password, progress_callback=on_progress
+            )
+        )
         worker.signals.result.connect(on_result)
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
 
+
     def handle_decrypt(self):
+        self.progress_bar.setValue(0)
         path = self.path_edit.text()
         password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
         if not path:
@@ -998,24 +1003,36 @@ class MainWindow(QMainWindow):
         def on_result(message):
             self.action_btn.setEnabled(True)
             if message == "PASSWORD_REQUIRED":
+                on_error(message)
+                self.set_error_bar_style()
                 QMessageBox.warning(self, "Password Required",
                                     "This message requires a decryption password")
+                self.progress_bar.setStyleSheet("")
+                self.progress_bar.setValue(0)
             elif message == "DECRYPTION_FAILED":
+                on_error(message)
+                self.set_error_bar_style()
                 QMessageBox.critical(self, "Decryption Failed",
                                      "Incorrect password or corrupted data")
+                self.progress_bar.setStyleSheet("")
+                self.progress_bar.setValue(0)
             elif message == "INVALID_CHECKSUM":
+                on_error(message)
+                self.set_error_bar_style()
                 QMessageBox.warning(self, "Integrity Error",
                                     "Message checksum failed - data may be corrupted")
+                self.progress_bar.setStyleSheet("")
+                self.progress_bar.setValue(0)
+
             elif message:
+                self.progress_bar.setValue(100)
                 QMessageBox.information(self, "Decrypted Message", message)
             else:
                 QMessageBox.warning(self, "No Message",
                                     "No valid message found in this image")
 
         def on_error(e):
-            self.action_btn.setEnabled(True)
             self.status_bar.showMessage(f"Decryption Error: {str(e)}")
-            QMessageBox.critical(self, "Error", str(e))
 
         worker = Worker(
             lambda: machine.hybrid_extract_message(path, password, progress_callback=on_progress)
@@ -1047,23 +1064,27 @@ class MainWindow(QMainWindow):
 
     def show_help(self):
         help_text = """Steganography Tool Help
+        
 This tool will embed or extract message. New file will be
 named encrypted_[original filename]. Process will always save png file
 temporarily and convert file to jpg, jpeg or bmp if needed. This way
-embedding is not tampered with lossy formatting.
+embedding is not typically tampered with lossy formatting.
 
 Usage Tips:
 1. For encryption: Select file/folder, enter message, choose method
-2. For decryption: Select encrypted file (method detection is automatic)
-3. DCT method survives LinkedIn-style JPEG conversion and resizing
+2. For decryption: Select encrypted file
+3. DCT method survives typically LinkedIn-style PNG to JPEG conversion and resizing
 4. EXIF data is preserved during encryption
 
-Note: Always keep original files as some platforms may alter images
+Please, check with decryption that encryption really works! With some
+files it might result corrupt embedding.
+
+This application do not alter original images!
 
 Steganography ≠ Encryption: It hides messages but doesn’t make them
 unreadable without extraction. Basic image analysis tools can detect 
-hidden data. For confidentiality, encrypt data first (e.g., AES) 
-before embedding or use password which is encrypted with AES. 
+hidden data. For confidentiality, encrypt data first before embedding 
+or use password which is encrypted with AES. 
 
 This script also supports non-secret use cases like copyright 
 watermarking (e.g., embedding invisible ownership markers).
@@ -1075,26 +1096,13 @@ PNG vs. JPEG Workflows:
 Capacity Limits: Data size depends on image resolution/color depth.
 Small messages work well; larger ones risk visible distortions (1 bit ≈ 1 pixel/subpixel).
 
-1. Adaptive LSB Modification
-
-Analyzes image complexity in local 3x3 pixel regions
-Uses 1-3 LSBs per channel based on region complexity
-Hides more data in textured/complex areas (less noticeable)
-Preserves image quality in smooth areas
-
-2. DCT-based Steganography
-
-Operates in frequency domain using Discrete Cosine Transform
-Embeds data in mid-frequency DCT coefficients (less perceptible)
-Converts image to YCbCr color space and modifies Y channel
-More resistant to statistical analysis than spatial domain methods
-
+Used methods: Adaptive LSB Modification and DCT-based Steganography, hybrid method.
 """
         QMessageBox.information(self, "Help", help_text)
 
 if __name__ == "__main__":
     machine = StegaMachine()
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(machine)
     window.show()
     sys.exit(app.exec())
