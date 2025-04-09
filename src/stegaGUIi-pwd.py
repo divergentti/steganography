@@ -46,6 +46,8 @@ from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 
+import faulthandler
+faulthandler.enable()
 
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False # Set to False in production for speed
@@ -74,13 +76,11 @@ class Worker(QRunnable):
 
     def run(self):
         try:
-            self.signals.status.emit("Working... wait ...")
             result = self.fn(*self.args, **self.kwargs)
+            # Emit result through Qt's signal system (thread-safe)
             self.signals.result.emit(result)
         except Exception as e:
             self.signals.status.emit(f"Error: {str(e)}")
-        finally:
-            self.signals.finished.emit()
 
 
 class StegaMachine:
@@ -135,87 +135,92 @@ class StegaMachine:
 
     def adaptive_lsb_embed(self, img, binary_message):
         """Vectorized adaptive LSB embedding"""
+        img_array = None
         # Convert PIL image to numpy array once
-        img_array = np.array(img)
-        height, width, _ = img_array.shape
+        try:
+            img_array = np.array(img)
+            height, width, _ = img_array.shape
 
-        # Prepare binary message as numpy array for faster access
-        message_bits = np.array([int(bit) for bit in binary_message], dtype=np.uint8)
-        message_length = len(message_bits)
-        data_index = 0
+            # Prepare binary message as numpy array for faster access
+            message_bits = np.array([int(bit) for bit in binary_message], dtype=np.uint8)
+            message_length = len(message_bits)
+            data_index = 0
 
-        # Pre-calculate all complexity values for 3x3 regions
-        complexity_map = np.zeros((height - 2, width - 2), dtype=np.float32)
+            # Pre-calculate all complexity values for 3x3 regions
+            complexity_map = np.zeros((height - 2, width - 2), dtype=np.float32)
 
-        # Calculate standard deviation for each 3x3 region using efficient sliding window
-        for y in range(0, height - 2, 3):
-            for x in range(0, width - 2, 3):
-                if y + 3 <= height and x + 3 <= width:
-                    region = img_array[y:y + 3, x:x + 3]
-                    complexity_map[y, x] = np.std(region)
+            # Calculate standard deviation for each 3x3 region using efficient sliding window
+            for y in range(0, height - 2, 3):
+                for x in range(0, width - 2, 3):
+                    if y + 3 <= height and x + 3 <= width:
+                        region = img_array[y:y + 3, x:x + 3]
+                        complexity_map[y, x] = np.std(region)
 
-        # Process in batches for better cache utilization
-        batch_size = 100  # Adjust based on testing
-        modified_pixels = []
+            # Process in batches for better cache utilization
+            batch_size = 100  # Adjust based on testing
+            modified_pixels = []
 
-        for i in range(0, width * height, batch_size):
-            # Get coordinates for this batch
-            coords = []
-            for j in range(i, min(i + batch_size, width * height)):
-                y, x = j // width, j % width
-                if 1 <= y < height - 1 and 1 <= x < width - 1:
-                    coords.append((y, x))
+            for i in range(0, width * height, batch_size):
+                # Get coordinates for this batch
+                coords = []
+                for j in range(i, min(i + batch_size, width * height)):
+                    y, x = j // width, j % width
+                    if 1 <= y < height - 1 and 1 <= x < width - 1:
+                        coords.append((y, x))
 
-            # Skip if no valid coordinates in this batch
-            if not coords:
-                continue
+                # Skip if no valid coordinates in this batch
+                if not coords:
+                    continue
 
-            # Process this batch
-            for y, x in coords:
-                if data_index >= message_length:
-                    break
+                # Process this batch
+                for y, x in coords:
+                    if data_index >= message_length:
+                        break
 
-                # Use precomputed complexity if available
-                if y - 1 < len(complexity_map) and x - 1 < len(complexity_map[0]):
-                    complexity = complexity_map[y - 1, x - 1]
-                else:
-                    # Fallback for edge pixels
-                    region = img_array[max(0, y - 1):min(height, y + 2), max(0, x - 1):min(width, x + 2)]
-                    complexity = np.std(region)
+                    # Use precomputed complexity if available
+                    if y - 1 < len(complexity_map) and x - 1 < len(complexity_map[0]):
+                        complexity = complexity_map[y - 1, x - 1]
+                    else:
+                        # Fallback for edge pixels
+                        region = img_array[max(0, y - 1):min(height, y + 2), max(0, x - 1):min(width, x + 2)]
+                        complexity = np.std(region)
 
-                capacity = self.get_embedding_capacity(complexity)
-                pixel = img_array[y, x].copy()
+                    capacity = self.get_embedding_capacity(complexity)
+                    pixel = img_array[y, x].copy()
 
-                # Embed bits in all channels at once
-                for i in range(3):  # RGB channels
-                    # Clear LSBs based on capacity
-                    mask = (1 << capacity) - 1
-                    pixel[i] &= (0xFF ^ mask)
+                    # Embed bits in all channels at once
+                    for i in range(3):  # RGB channels
+                        # Clear LSBs based on capacity
+                        mask = (1 << capacity) - 1
+                        pixel[i] &= (0xFF ^ mask)
 
-                    # Get bits to embed (as many as capacity allows)
-                    bits_to_embed = 0
-                    for j in range(capacity):
-                        if data_index < message_length:
-                            bit_value = message_bits[data_index]
-                            bits_to_embed |= bit_value << j
-                            data_index += 1
+                        # Get bits to embed (as many as capacity allows)
+                        bits_to_embed = 0
+                        for j in range(capacity):
+                            if data_index < message_length:
+                                bit_value = message_bits[data_index]
+                                bits_to_embed |= bit_value << j
+                                data_index += 1
 
-                    # Embed bits
-                    pixel[i] |= bits_to_embed
+                        # Embed bits
+                        pixel[i] |= bits_to_embed
 
-                # Store the modified pixel
-                modified_pixels.append((y, x, pixel))
+                    # Store the modified pixel
+                    modified_pixels.append((y, x, pixel))
 
-        # Apply all modified pixels to the original image
-        result_img = img.copy()
-        result_array = np.array(result_img)
-        for y, x, pixel in modified_pixels:
-            result_array[y, x] = pixel
+            # Apply all modified pixels to the original image
+            result_img = img.copy()
+            result_array = np.array(result_img)
+            for y, x, pixel in modified_pixels:
+                result_array[y, x] = pixel
 
-        # Convert back to PIL Image
-        result_img = Image.fromarray(result_array)
+            # Convert back to PIL Image
+            result_img = Image.fromarray(result_array)
 
-        return result_img, data_index
+            return result_img, data_index
+        finally:
+            if img_array is not None:
+                del img_array
 
     def adaptive_lsb_extract(self, img, message_length):
         """Optimized LSB extraction using NumPy vectorization"""
@@ -808,6 +813,25 @@ class MainWindow(QMainWindow):
             }
         """)
 
+    def set_error_text_style(self):
+        self.status_bar.setStyleSheet("""
+            QStatusBar {
+                border: 1px solid grey;
+                border-radius: 5px;
+                background-color: red;
+                color: white;
+            }
+            """)
+
+    def set_ok_progress_bar_style(self):
+        # Not yet improved
+        self.progress_bar.setStyleSheet("")
+
+    def set_ok_text_style(self):
+        # Not yet improved
+        self.status_bar.setStyleSheet("")
+        self.status_bar.showMessage("")
+
     def create_menu(self):
         menu_bar = self.menuBar()
         help_menu = menu_bar.addMenu("Help")
@@ -831,6 +855,7 @@ class MainWindow(QMainWindow):
         )
 
     def handle_browse(self):
+
         if self.encrypt_radio.isChecked() and self.folder_radio.isChecked():
             path = QFileDialog.getExistingDirectory(self, "Select Folder")
         else:
@@ -856,12 +881,17 @@ class MainWindow(QMainWindow):
             self.update_preview(path)
 
     def update_preview(self, path):
-
         if os.path.isfile(path):
-            pixmap = QPixmap(path)
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
-                self.preview_label.setPixmap(scaled)
+            if os.path.isfile(path):
+                try:
+                    pixmap = QPixmap(path)
+                    if not pixmap.isNull():
+                        # Create a temporary painter to ensure clean scaling
+                        scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
+                        self.preview_label.setPixmap(scaled)
+                finally:
+                    # Explicit cleanup (not strictly necessary for QPixmap but good practice)
+                    del pixmap
 
                 try:
                     size_bytes = os.path.getsize(path)
@@ -906,10 +936,13 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.status_bar.showMessage(f"EXIF Error: {str(e)}")
             return f"EXIF Error: {str(e)}"
+        finally:
+            image.close()
 
     def handle_action(self):
         path = self.path_edit.text()
         if not path:
+            self.set_error_text_style()
             self.status_bar.showMessage("Please select input path")
             return
 
@@ -934,6 +967,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
 
         def on_progress(percent):
+
             phases = {
                 5: "Starting...",
                 10: "Processing image...",
@@ -943,6 +977,7 @@ class MainWindow(QMainWindow):
                 90: "Final conversion...",
                 100: "Done"
             }
+
             self.progress_bar.setValue(percent)
             self.progress_label.setText(phases.get(percent, "Working..."))
             self.progress_bar.setValue(percent)
@@ -975,6 +1010,7 @@ class MainWindow(QMainWindow):
 
     def handle_decrypt(self):
         self.progress_bar.setValue(0)
+        self.set_ok_text_style()
         path = self.path_edit.text()
         password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
         if not path:
@@ -1007,21 +1043,21 @@ class MainWindow(QMainWindow):
                 self.set_error_bar_style()
                 QMessageBox.warning(self, "Password Required",
                                     "This message requires a decryption password")
-                self.progress_bar.setStyleSheet("")
+                self.set_ok_progress_bar_style()
                 self.progress_bar.setValue(0)
             elif message == "DECRYPTION_FAILED":
                 on_error(message)
                 self.set_error_bar_style()
                 QMessageBox.critical(self, "Decryption Failed",
                                      "Incorrect password or corrupted data")
-                self.progress_bar.setStyleSheet("")
+                self.set_ok_progress_bar_style()
                 self.progress_bar.setValue(0)
             elif message == "INVALID_CHECKSUM":
                 on_error(message)
                 self.set_error_bar_style()
                 QMessageBox.warning(self, "Integrity Error",
                                     "Message checksum failed - data may be corrupted")
-                self.progress_bar.setStyleSheet("")
+                self.set_ok_progress_bar_style()
                 self.progress_bar.setValue(0)
 
             elif message:
