@@ -38,7 +38,7 @@ from PyQt6.QtWidgets import (
     QLabel, QTextEdit, QFileDialog, QStatusBar, QMessageBox, QProgressBar
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QMetaObject
 from PyQt6.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 
 # pip install pycryptodome
@@ -64,9 +64,9 @@ VERSION = "0.0.4 - 09.04.2025"
 class WorkerSignals(QObject):
     finished = pyqtSignal()
     progress = pyqtSignal(int)  # Percentage (0-100)
-    status = pyqtSignal(str)  # Text updates ("Encrypting...")
-    result = pyqtSignal(object)  # Return value (e.g., output path)
-
+    status = pyqtSignal(str)  # Status text ("Encrypting...")
+    phase = pyqtSignal(str)  # Current phase ("Embedding LSB...")
+    result = pyqtSignal(object)
 
 class Worker(QRunnable):
     def __init__(self, fn, *args, **kwargs):
@@ -75,15 +75,18 @@ class Worker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        self._is_cancelled = False
+
+    def cancel(self):
+        self._is_cancelled = True
 
     def run(self):
         try:
-            result = self.fn(*self.args, **self.kwargs)
-            # Emit result through Qt's signal system (thread-safe)
-            self.signals.result.emit(result)
+            if not self._is_cancelled:
+                result = self.fn(*self.args, **self.kwargs)
+                self.signals.result.emit(result)  # Thread-safe signal
         except Exception as e:
             self.signals.status.emit(f"Error: {str(e)}")
-
 
 class StegaMachine:
     START_CHAR = '\x02'  # Use non-printable Unicode characters
@@ -491,7 +494,7 @@ class StegaMachine:
 
     # ------------------ Optimized Hybrid Steganography Functions ------------------
 
-    def hybrid_embed_message(self, image_path, message, password=None, progress_callback=None):
+    def hybrid_embed_message(self, image_path, message, password=None, progress_signal=None):
         """Optimized embedding with progress reporting"""
 
         try:
@@ -501,8 +504,12 @@ class StegaMachine:
                 raise FileNotFoundError(f"Image file not found at {abs_path}")
 
             # Progress update
-            if progress_callback:
-                progress_callback(5)  # Starting
+            try:
+                if progress_signal:
+                    progress_signal.emit(5)  # Starting
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
 
             # Read Exif (cv2 do not support it)
             with Image.open(image_path) as img:
@@ -527,9 +534,13 @@ class StegaMachine:
             checksum = self._calculate_checksum(message_with_prefix)
             full_message = f"{self.START_CHAR}{checksum}{message_with_prefix}{self.STOP_CHAR}"
 
-            # Progress update
-            if progress_callback:
-                progress_callback(10)  # Image loaded
+            try:
+                if progress_signal:
+                    progress_signal.emit(10)  # Starting
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
+
 
             # Vectorized binary conversion
             binary_message = ''.join(format(ord(char), '08b') for char in full_message)
@@ -540,9 +551,12 @@ class StegaMachine:
             img_copy = img.copy()
             img_with_length, _ = self.adaptive_lsb_embed(img_copy, length_binary)
 
-            # Progress update
-            if progress_callback:
-                progress_callback(30)  # LSB embedding done
+            try:
+                if progress_signal:
+                    progress_signal.emit(30)
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
 
             # Embed message using DCT
             modified_img, embedded_bits = self.dct_embed(img_with_length, binary_message)
@@ -551,9 +565,12 @@ class StegaMachine:
             if embedded_bits < message_length:
                 raise ValueError("Could not embed entire message. Try a larger image.")
 
-            # Progress update
-            if progress_callback:
-                progress_callback(50)  # DCT embedding done
+            try:
+                if progress_signal:
+                    progress_signal.emit(50)
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
 
             # Enhanced Save Logic
             original_dir = os.path.dirname(abs_path)
@@ -561,23 +578,35 @@ class StegaMachine:
             base_name, original_ext = os.path.splitext(original_name)
             original_ext = original_ext.lower()
 
-            # Progress update
-            if progress_callback:
-                progress_callback(70)  # Save prep done
-
+            try:
+                if progress_signal:
+                    progress_signal.emit(70)
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
             # Always embed to PNG first (temporary if original isn't PNG)
             temp_png_path = os.path.join(original_dir, f"temp_embedded_{base_name}.png")
             modified_img.save(temp_png_path, format='PNG')
 
-            if progress_callback:
-                progress_callback(90)  # Final conversion...
+            try:
+                if progress_signal:
+                    progress_signal.emit(90)
+            except Exception as e:
+                if progress_signal:
+                    progress_signal.emit(-1)
 
             # Case 1: Original is PNG -> Keep PNG output
             if original_ext == '.png':
                 final_path = os.path.join(original_dir, f"encrypted_{base_name}.png")
                 os.replace(temp_png_path, final_path)  # Atomic rename
-                if progress_callback:
-                    progress_callback(100)  # Done
+
+                try:
+                    if progress_signal:
+                        progress_signal.emit(100)
+                except Exception as e:
+                    if progress_signal:
+                        progress_signal.emit(-1)
+
                 return final_path
 
             # Case 2: Original is JPEG/BMP -> Convert back to original format
@@ -596,8 +625,13 @@ class StegaMachine:
                     Image.open(temp_png_path).save(final_path, **save_args)
 
                 os.remove(temp_png_path)  # Clean up temporary PNG
-                if progress_callback:
-                    progress_callback(100)  # Done
+
+                try:
+                    if progress_signal:
+                        progress_signal.emit(100)
+                except Exception as e:
+                    if progress_signal:
+                        progress_signal.emit(-1)
 
                 return final_path
 
@@ -605,8 +639,8 @@ class StegaMachine:
             # Clean up temp file if something failed
             if 'temp_png_path' in locals() and os.path.exists(temp_png_path):
                 os.remove(temp_png_path)
-            if progress_callback:
-                progress_callback(-1)  # Error indicator
+                if progress_signal:
+                    progress_signal.emit(-1)
             raise e
 
     def hybrid_extract_message(self, image_path, password=None, progress_callback=None):
@@ -694,6 +728,14 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 800, 550)
         self.setup_ui()
         self.create_menu()
+        self.worker = None
+        self.cancel_btn.clicked.connect(self.cancel_operation)
+
+    def cancel_operation(self):
+        if self.worker:
+            self.worker.cancel()
+            self.status_bar.showMessage("Cancelling...")
+            self.cancel_btn.setEnabled(False)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -751,9 +793,14 @@ class MainWindow(QMainWindow):
         password_layout.addWidget(self.password_edit)
         layout.addLayout(password_layout)
 
-        # Action button
+        # Button row
+        button_row = QHBoxLayout()
         self.action_btn = QPushButton("Encrypt")
-        layout.addWidget(self.action_btn)
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setEnabled(False)  # Disabled by default
+        button_row.addWidget(self.action_btn)
+        button_row.addWidget(self.cancel_btn)
+        layout.addLayout(button_row)
 
         # Preview area
         preview_layout = QHBoxLayout()
@@ -834,6 +881,43 @@ class MainWindow(QMainWindow):
         self.status_bar.setStyleSheet("")
         self.status_bar.showMessage("")
 
+    def on_encrypt_progress(self, percent):
+        """Handles progress updates during ENCRYPTION."""
+        phases = {
+            5: "Starting encryption...",
+            10: "Processing image...",
+            30: "Embedding LSB...",
+            50: "Embedding DCT...",
+            70: "Saving file...",
+            90: "Finalizing...",
+            100: "Encryption complete!"
+        }
+        self._update_progress(percent, phases)
+
+    def on_decrypt_progress(self, percent):
+        """Handles progress updates during DECRYPTION."""
+        phases = {
+            10: "Extracting data...",
+            30: "Analyzing DCT...",
+            50: "Decoding message...",
+            80: "Verifying...",
+            100: "Decryption complete!"
+        }
+        self._update_progress(percent, phases)
+
+    def _update_progress(self, percent, phase_map):
+        """Shared logic for updating progress (avoid code duplication)."""
+        self.progress_bar.setValue(percent)
+        self.progress_label.setText(phase_map.get(percent, "Working..."))
+
+        if percent == 100:
+            self.status_bar.showMessage(phase_map[100])
+        elif percent == -1:
+            self.action_btn.setEnabled(True)
+            self.cancel_btn.setEnabled(False)
+            self.status_bar.showMessage("Operation failed!")
+
+
     def create_menu(self):
         menu_bar = self.menuBar()
         help_menu = menu_bar.addMenu("Help")
@@ -857,7 +941,6 @@ class MainWindow(QMainWindow):
         )
 
     def handle_browse(self):
-
         if self.encrypt_radio.isChecked() and self.folder_radio.isChecked():
             path = QFileDialog.getExistingDirectory(self, "Select Folder")
         else:
@@ -954,6 +1037,18 @@ class MainWindow(QMainWindow):
         else:
             self.handle_decrypt()
 
+    def on_encrypt_result(self, output_path, is_folder):
+        self.action_btn.setEnabled(True)
+        if output_path:
+            if is_folder:
+                # For folders, we don't update the preview with a specific file
+                QMessageBox.information(self, "Success", output_path)
+            else:
+                # For single files, update the preview with the output path
+                if isinstance(output_path, str):  # Ensure it's a string path
+                    self.update_preview(output_path)
+                    QMessageBox.information(self, "Success", f"Saved to {output_path}")
+
     def handle_encrypt(self):
         path = self.path_edit.text()
         message = self.message_input.text()
@@ -970,50 +1065,25 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
 
         is_folder = os.path.isdir(path)
-        target_method = self.process_folder if is_folder else machine.hybrid_embed_message
 
-        def on_progress(percent):
-
-            phases = {
-                5: "Starting...",
-                10: "Processing image...",
-                30: "Embedding LSB...",
-                50: "Embedding DCT...",
-                70: "Saving temporary file...",
-                90: "Final conversion...",
-                100: "Done"
-            }
-
-            self.progress_bar.setValue(percent)
-            self.progress_label.setText(phases.get(percent, "Working..."))
-            self.progress_bar.setValue(percent)
-            if percent == 100:
-                self.status_bar.showMessage("Encryption complete!")
-            elif percent == -1:
-                self.status_bar.showMessage("Encryption failed")
-
-        def on_result(output_path):
-            self.action_btn.setEnabled(True)
-            if output_path:
-                self.update_preview(output_path)
-                QMessageBox.information(self, "Success",
-                                        f"Saved to {output_path}")
-            if is_folder:
-                QMessageBox.information(self, "Success", output_path)
-
-        def on_error(e):
-            self.action_btn.setEnabled(True)
-            QMessageBox.critical(self, "Error", str(e))
-
+        # Create the worker
         if is_folder:
-            worker = Worker(lambda: self.process_folder(path, message, password, progress_callback=on_progress))
+            worker = Worker(
+                lambda: self.process_folder(path, message, password, progress_signal=None)
+            )
         else:
             worker = Worker(
-                lambda: machine.hybrid_embed_message(path, message, password, progress_callback=on_progress))
+                lambda: self.stego.hybrid_embed_message(path, message, password,
+                                                        progress_signal=worker.signals.progress)
+            )
 
-        worker.signals.result.connect(on_result)
+        worker.signals.progress.connect(self.on_encrypt_progress)
+        worker.signals.result.connect(lambda output_path: self.on_encrypt_result(output_path, is_folder))
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
+
+        self.worker = worker  # Store the worker for cancellation
+        self.cancel_btn.setEnabled(True)
         self.threadpool.start(worker)
 
     def handle_decrypt(self):
@@ -1079,14 +1149,14 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Decryption Error: {str(e)}")
 
         worker = Worker(
-            lambda: machine.hybrid_extract_message(path, password, progress_callback=on_progress)
+            lambda: machine.hybrid_extract_message(path, password, progress_callback=self.on_decrypt_progress)
         )
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.result.connect(on_result)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
 
-    def process_folder(self, folder_path, message, password=None, progress_callback=None):
+    def process_folder(self, folder_path, message, password=None, progress_signal=None):
         supported_ext = ('.png', '.jpg', '.jpeg', '.bmp')
         files = []
         folder_path = os.path.abspath(folder_path)
@@ -1100,16 +1170,39 @@ class MainWindow(QMainWindow):
                         files.append(full_path)
 
         total = len(files)
+        results = []
+
         for i, file_path in enumerate(files):
+            if hasattr(self, 'worker') and self.worker._is_cancelled:
+                if hasattr(self, 'worker') and hasattr(self.worker.signals, 'progress'):
+                    self.worker.signals.progress.emit(-1)  # Signal cancelation
+                return "Operation cancelled"
+
             try:
-                abs_path = os.path.abspath(file_path)
-                machine.hybrid_embed_message(abs_path, message, password)
-                if progress_callback:
-                    progress_callback(int((i + 1) / total * 100))
+                result = self.stego.hybrid_embed_message(
+                    file_path,
+                    message,
+                    password,
+                    progress_signal=None
+                )
+                results.append(result)
+
+                # Update overall progress after each file completes
+                if hasattr(self, 'worker') and hasattr(self.worker.signals, 'progress'):
+                    overall_progress = int(((i + 1) / total) * 100)
+                    self.worker.signals.progress.emit(overall_progress)
+
+                    # Also update status message
+                    status_msg = f"Processing file {i + 1} of {total} ({int(overall_progress)}%)"
+                    self.worker.signals.status.emit(status_msg)
+
             except Exception as e:
                 print(f"Error processing {file_path}: {str(e)}")
+                if hasattr(self, 'worker') and hasattr(self.worker.signals, 'status'):
+                    self.worker.signals.status.emit(f"Error on file: {os.path.basename(file_path)}")
+                continue
 
-        return f"Processed {len(files)} files successfully"
+        return f"Processed {len(results)}/{len(files)} files successfully"
 
     def show_help(self):
         help_text = """Steganography Tool Help
