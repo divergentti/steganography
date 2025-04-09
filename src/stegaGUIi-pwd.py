@@ -46,13 +46,14 @@ from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 
-import faulthandler
-faulthandler.enable()
-
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False # Set to False in production for speed
 debug_embed = False  # Set to False in production for speed
 debug_gui = True  # Set to False in production for speed
+
+if debug_gui or debug_embed or debug_extract or debug_crypto:
+    import faulthandler
+    faulthandler.enable()
 
 # Number of worker threads for parallel processing
 NUM_WORKERS = max(1, os.cpu_count() - 1)  # Leave one core free for system
@@ -932,12 +933,12 @@ class MainWindow(QMainWindow):
             for tag_id, value in exif_data.items():
                 tag_name = TAGS.get(tag_id, tag_id)
                 exif_info.append(f"{tag_name}: {value}")
+                image.close()
             return "\n".join(exif_info)
         except Exception as e:
             self.status_bar.showMessage(f"EXIF Error: {str(e)}")
-            return f"EXIF Error: {str(e)}"
-        finally:
             image.close()
+            return f"EXIF Error: {str(e)}"
 
     def handle_action(self):
         path = self.path_edit.text()
