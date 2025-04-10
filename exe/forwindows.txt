@@ -1,0 +1,6 @@
+Here you find an executable exe file for Windows. Build in Windows 11 virtual machine.
+
+Command used to make binary:
+
+nuitka --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 Steganogaphy/stegaGUIv005.py
+
