@@ -1,0 +1,73 @@
+Here you find an executable bin file for linux. Command used to make binary:
+
+nuitka --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 Steganogaphy/stegaGUIv005.py
+Nuitka-Options: Used command line options: --standalone --lto=yes --onefile
+Nuitka-Options: --follow-imports --enable-plugin=pyqt6
+Nuitka-Options: Steganogaphy/stegaGUIv005.py
+Nuitka-Options: Following all imports is the default for onefile mode and need
+Nuitka-Options: not be specified.
+Nuitka-Plugins:pyqt6: Support for PyQt6 is not perfect, e.g. Qt threading does
+Nuitka-Plugins:pyqt6: not work, so prefer PySide6 if you can.
+Nuitka: Starting Python compilation with Nuitka '2.6.9' on Python (flavor Debian
+Nuitka: Python), '3.12' commercial grade 'not installed'.
+Nuitka-Plugins:anti-bloat: Not including '_json' automatically in order to avoid
+Nuitka-Plugins:anti-bloat: bloat, but this may cause: may slow down by using
+Nuitka-Plugins:anti-bloat: fallback implementation.
+Nuitka: Completed Python level compilation and optimization.
+Nuitka: Generating source code for C backend compiler.
+Nuitka: Running data composer tool for optimal constant value handling.         
+Nuitka: Running C compilation via Scons.
+Nuitka-Scons: Backend C compiler: gcc (gcc 13).
+Nuitka-Scons: Backend C linking with 694 files (no progress information
+Nuitka-Scons: available for this stage).
+Nuitka-Scons: Compiled 694 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache miss': 694
+Nuitka-Plugins:pyqt6: Including Qt plugins
+Nuitka-Plugins:pyqt6: 'egldeviceintegrations,iconengines,imageformats,platforms,platformthemes,printsupport,tls,wayland-decoration-client,wayland-graphics-integration-client,wayland-shell-integration,xcbglintegrations'
+Nuitka-Plugins:pyqt6: below 'PyQt6/Qt6/plugins'.
+Nuitka-Plugins:dll-files: Found 1 file DLLs from cv2 installation.
+Nuitka-Plugins:data-files: Included data file 'Crypto/Util/.keep_dir.txt' due to
+Nuitka-Plugins:data-files: empty dir needed for 'Crypto.Util._raw_api'.
+Nuitka-Plugins:data-files: Included data file 'cv2/qt/fonts/DejaVuSans-Bold.ttf'
+Nuitka-Plugins:data-files: due to package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSans-BoldOblique.ttf' due to
+Nuitka-Plugins:data-files: package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSans-ExtraLight.ttf' due to
+Nuitka-Plugins:data-files: package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSans-Oblique.ttf' due to package
+Nuitka-Plugins:data-files: data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file 'cv2/qt/fonts/DejaVuSans.ttf' due
+Nuitka-Plugins:data-files: to package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSansCondensed-Bold.ttf' due to
+Nuitka-Plugins:data-files: package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSansCondensed-BoldOblique.ttf'
+Nuitka-Plugins:data-files: due to package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSansCondensed-Oblique.ttf' due to
+Nuitka-Plugins:data-files: package data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'cv2/qt/fonts/DejaVuSansCondensed.ttf' due to package
+Nuitka-Plugins:data-files: data directory 'qt/fonts' for 'cv2'.
+Nuitka-Plugins:data-files: Included data file
+Nuitka-Plugins:data-files: 'scipy/stats/_sobol_direction_numbers.npz' due to
+Nuitka-Plugins:data-files: package data for 'scipy'.
+Nuitka-Postprocessing: Creating single file from dist folder, this may take a
+Nuitka-Postprocessing: while.
+Nuitka-Onefile: Running bootstrap binary compilation via Scons.
+Nuitka-Scons: Onefile C compiler: gcc (gcc 13).
+Nuitka-Scons: Onefile C linking.                
+Nuitka-Scons: Compiled 1 C files using ccache.
+Nuitka-Scons: Cached C files (using ccache) with result 'cache miss': 1
+Nuitka-Onefile: Using compression for onefile payload.
+Nuitka-Onefile: Onefile payload compression ratio (23.47%) size 492308411 to    
+Nuitka-Onefile: 115544107.
+Nuitka-Onefile: Keeping onefile build directory 'stegaGUIv005.onefile-build'.   
+Nuitka: Keeping dist folder 'stegaGUIv005.dist' for inspection, no need to use
+Nuitka: it.
+Nuitka: Keeping build directory 'stegaGUIv005.build'.
+Nuitka: Successfully created 'stegaGUIv005.bin'.
