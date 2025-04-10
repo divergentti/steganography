@@ -3,6 +3,7 @@
 This project is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining adaptive LSB and DCT-based methods to hide secret messages within images. It also offers optional AES encryption to secure the hidden message. The tool preserves image quality and metadata—such as EXIF data—allowing the final file to retain important information from the original image.
 
 Video about how this application works at my channel https://www.youtube.com/@Controvergent
+Sample images under samples. Password is qwerty.
 
 **Motivation**
 
@@ -44,9 +45,9 @@ PyCryptodome
 1. Clone the repository: git clone https://github.com/divergentti/steganography.git
 cd steganography
 2. Create a virtual environment (optional but recommended):
-3. python -m venv venv
-4. source venv/bin/activate  # On Windows: venv\Scripts\activate
-5. Install the required packages: pip install -r requirements.txt
+- python -m venv venv
+- source venv/bin/activate  # On Windows: venv\Scripts\activate
+- Install the required packages: pip install -r requirements.txt
 
 The source code is commented and with options to enable debugging.
 
