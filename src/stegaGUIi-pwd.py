@@ -998,6 +998,7 @@ class MainWindow(QMainWindow):
             self.update_preview(path)
 
     def update_preview(self, path):
+        self.cancel_btn.setEnabled(False)
         if os.path.isfile(path):
             try:
                 self.original_pixmap = QPixmap(path)
@@ -1253,6 +1254,7 @@ class MainWindow(QMainWindow):
         help_text = """Steganography Tool - Help Guide
 
 Embed or extract hidden messages in images. 
+Currently supports png and jp(e)g.
         
 Key Features:
 - Embed/extract messages with optional password protection
@@ -1291,6 +1293,8 @@ Applications:
 - Secure communication
 - Copyright watermarking
 - Metadata embedding
+
+(C) 2025 - Jari Hiltunen / Divergentti
         """
         QMessageBox.information(self, "Help", help_text)
 
