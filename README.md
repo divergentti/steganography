@@ -44,8 +44,8 @@ PyCryptodome
 **Installation if using source code**
 
 1. Clone the repository: git clone https://github.com/divergentti/steganography.git
-cd steganography
-2. Create a virtual environment (optional but recommended):
+2. cd steganography
+3. Create a virtual environment (optional but recommended):
 - python -m venv venv
 - source venv/bin/activate  # On Windows: venv\Scripts\activate
 - Install the required packages: pip install -r requirements.txt
