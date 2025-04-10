@@ -46,21 +46,20 @@ from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 
+# For debugging issues with the code
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False  # Set to False in production for speed
 debug_embed = False  # Set to False in production for speed
 debug_gui = False  # Set to False in production for speed
-debug_verify = True # # Set to False in production for speed
+debug_verify = False # # Set to False in production for speed
 
 if debug_gui or debug_embed or debug_extract or debug_crypto:
     import faulthandler
-
     faulthandler.enable()
 
 # Number of worker threads for parallel processing
 NUM_WORKERS = max(1, os.cpu_count() - 1)  # Leave one core free for system
 VERSION = "0.0.5 - 10.04.2025"
-
 
 class WorkerSignals(QObject):
     finished = pyqtSignal()
@@ -82,6 +81,7 @@ class Worker(QRunnable):
         self._is_cancelled = True
 
     def run(self):
+        # For QRunnable
         try:
             if not self._is_cancelled:
                 result = self.fn(*self.args, **self.kwargs)
@@ -163,7 +163,7 @@ class StegaMachine:
                         complexity_map[y, x] = np.std(region)
 
             # Process in batches for better cache utilization
-            batch_size = 100  # Adjust based on testing
+            batch_size = 100  # You may adjust this value based on testing
             modified_pixels = []
 
             for i in range(0, width * height, batch_size):
@@ -429,7 +429,7 @@ class StegaMachine:
             # Apply DCT
             dct_block = dct(dct(block.T, norm='ortho').T, norm='ortho')
 
-            # Same positions used for embedding
+            # Same positions used for embedding, if you add more zigzags, make changes to encryption too!
             positions = [(1, 2), (2, 1), (2, 2), (1, 3), (3, 1)]
             bits = ""
 
@@ -505,7 +505,7 @@ class StegaMachine:
             if not os.path.exists(abs_path):
                 raise FileNotFoundError(f"Image file not found at {abs_path}")
 
-            # Progress update
+            # Progress bar updates
             try:
                 if progress_signal:
                     progress_signal.emit(5)  # Starting
@@ -543,7 +543,6 @@ class StegaMachine:
                 if progress_signal:
                     progress_signal.emit(-1)
 
-
             # Vectorized binary conversion
             binary_message = ''.join(format(ord(char), '08b') for char in full_message)
             message_length = len(binary_message)
@@ -567,6 +566,7 @@ class StegaMachine:
             if embedded_bits < message_length:
                 raise ValueError("Could not embed entire message. Try a larger image.")
 
+            # Progress bar updates
             try:
                 if progress_signal:
                     progress_signal.emit(50)
@@ -574,7 +574,6 @@ class StegaMachine:
                 if progress_signal:
                     progress_signal.emit(-1)
 
-            # Enhanced Save Logic
             original_dir = os.path.dirname(abs_path)
             original_name = os.path.basename(abs_path)
             base_name, original_ext = os.path.splitext(original_name)
@@ -586,6 +585,7 @@ class StegaMachine:
             except Exception as e:
                 if progress_signal:
                     progress_signal.emit(-1)
+
             # Always embed to PNG first (temporary if original isn't PNG)
             temp_png_path = os.path.join(original_dir, f"temp_embedded_{base_name}.png")
             modified_img.save(temp_png_path, format='PNG')
@@ -741,10 +741,8 @@ class MainWindow(QMainWindow):
     def update_preview_pixmap(self):
         """Scales the pixmap to fit within the label's current size"""
         if hasattr(self, 'original_pixmap') and not self.original_pixmap.isNull():
-            # Use the full available width and height
             available_width = self.preview_label.width()
             available_height = self.preview_label.height()
-
             scaled = self.original_pixmap.scaled(
                 available_width,
                 available_height,
@@ -767,7 +765,6 @@ class MainWindow(QMainWindow):
 
         # Mode and Input Type in same row
         mode_input_row = QHBoxLayout()
-
         self.mode_group = QGroupBox("Operation Mode")
         mode_layout = QHBoxLayout()
         self.encrypt_radio = QRadioButton("Encrypt")
@@ -823,7 +820,7 @@ class MainWindow(QMainWindow):
         button_row.addWidget(self.cancel_btn)
         layout.addLayout(button_row)
 
-        # --- Preview and EXIF area using QSplitter ---
+        # Preview and EXIF area using QSplitter
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setStretchFactor(0, 3)  # Give more space to preview
         splitter.setStretchFactor(1, 1)  # Less space to info panel
@@ -833,7 +830,7 @@ class MainWindow(QMainWindow):
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.preview_label.setMinimumSize(300, 300)  # Set a reasonable minimum size
+        self.preview_label.setMinimumSize(300, 300)
         self.preview_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
         self.preview_label.installEventFilter(self)
         splitter.addWidget(self.preview_label)
@@ -856,12 +853,10 @@ class MainWindow(QMainWindow):
         self.exif_text.setReadOnly(True)
         right_panel_layout.addWidget(self.exif_text)
 
-
+        # Splitter
         splitter.addWidget(right_panel_widget)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
-
-
         layout.addWidget(splitter)
 
         # Progress
@@ -880,8 +875,6 @@ class MainWindow(QMainWindow):
         self.action_btn.clicked.connect(self.handle_action)
         self.file_radio.toggled.connect(self.update_path_field)
         self.encrypt_checkbox.stateChanged.connect(self.toggle_password_field)
-        self.threadpool = QThreadPool()
-
         self.threadpool = QThreadPool()
 
     def resizeEvent(self, event):
@@ -1067,7 +1060,7 @@ class MainWindow(QMainWindow):
         path = self.path_edit.text()
         if not path:
             self.set_error_text_style()
-            self.status_bar.showMessage("Please select input path")
+            self.status_bar.showMessage("Please select image or input path")
             return
 
         if self.encrypt_radio.isChecked():
@@ -1079,10 +1072,8 @@ class MainWindow(QMainWindow):
         self.action_btn.setEnabled(True)
         if output_path:
             if is_folder:
-                # For folders, we don't update the preview with a specific file
                 QMessageBox.information(self, "Success", output_path)
             else:
-                # For single files, update the preview with the output path
                 if isinstance(output_path, str):  # Ensure it's a string path
                     self.update_preview(output_path)
                     QMessageBox.information(self, "Success", f"Saved to {output_path}")
@@ -1091,12 +1082,20 @@ class MainWindow(QMainWindow):
         path = self.path_edit.text()
         message = self.message_input.text()
         password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
+        self.set_ok_text_style()
 
         if not path:
+            self.set_error_text_style()
             self.status_bar.showMessage("Please select an input file or folder!")
             return
         if not message:
+            self.set_error_text_style()
             self.status_bar.showMessage("Message is required!")
+            return
+
+        if self.encrypt_checkbox.isChecked() and not password:
+            self.set_error_text_style()
+            self.status_bar.showMessage("Enter password for encryption!")
             return
 
         self.action_btn.setEnabled(False)
@@ -1104,7 +1103,6 @@ class MainWindow(QMainWindow):
 
         is_folder = os.path.isdir(path)
 
-        # Create the worker
         if is_folder:
             worker = Worker(
                 lambda: self.process_folder(path, message, password)
@@ -1131,8 +1129,10 @@ class MainWindow(QMainWindow):
                         if extracted_message == message:
                             worker.signals.status.emit("Verification successful!")
                         else:
+                            self.set_error_text_style()
                             worker.signals.status.emit("WARNING: Verification failed - messages don't match!")
                     except Exception as e:
+                        self.set_error_text_style()
                         worker.signals.status.emit(f"WARNING: Verification failed with error: {str(e)}")
 
                 return output_path
@@ -1144,7 +1144,7 @@ class MainWindow(QMainWindow):
         worker.signals.status.connect(self.status_bar.showMessage)
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
 
-        self.worker = worker  # Store the worker for cancellation
+        self.worker = worker
         self.cancel_btn.setEnabled(True)
         self.threadpool.start(worker)
 
@@ -1154,6 +1154,7 @@ class MainWindow(QMainWindow):
         path = self.path_edit.text()
         password = self.password_edit.text() if self.encrypt_checkbox.isChecked() else None
         if not path:
+            self.set_error_text_style()
             self.status_bar.showMessage("Please select an input file or folder!")
             return
 
@@ -1192,6 +1193,7 @@ class MainWindow(QMainWindow):
                                     "No valid message found in this image")
 
         def on_error(e):
+            self.set_error_text_style()
             self.status_bar.showMessage(f"Decryption Error: {str(e)}")
 
         worker = Worker(
@@ -1233,12 +1235,9 @@ class MainWindow(QMainWindow):
                 )
                 results.append(result)
 
-                # Update overall progress after each file completes
                 if hasattr(self, 'worker') and hasattr(self.worker.signals, 'progress'):
                     overall_progress = int(((i + 1) / total) * 100)
                     self.worker.signals.progress.emit(overall_progress)
-
-                    # Also update status message
                     status_msg = f"Processing file {i + 1} of {total} ({int(overall_progress)}%)"
                     self.worker.signals.status.emit(status_msg)
 
@@ -1251,41 +1250,48 @@ class MainWindow(QMainWindow):
         return f"Processed {len(results)}/{len(files)} files successfully"
 
     def show_help(self):
-        help_text = """Steganography Tool Help
+        help_text = """Steganography Tool - Help Guide
 
-This tool will embed or extract message. New file will be
-named encrypted_[original filename]. Process will always save png file
-temporarily and convert file to jpg, jpeg or bmp if needed. This way
-embedding is not typically tampered with lossy formatting.
+Embed or extract hidden messages in images. 
+        
+Key Features:
+- Embed/extract messages with optional password protection
+- Preserves EXIF metadata
+- Hybrid methods: LSB + DCT steganography
+- Survives common format conversions
 
-Usage Tips:
-1. For encryption: Select file/folder, enter message, choose method
-2. For decryption: Select encrypted file
-3. DCT method survives typically LinkedIn-style PNG to JPEG conversion and resizing
-4. EXIF data is preserved during encryption
+Usage:
+    [Encrypt]
+    1. Select image/folder
+    2. Enter message to be emdedded
+    3. (Optional) Set password
+    4. Output saved as "encrypted_[original filename]
+        
+    [Decrypt]
+    1. Select encrypted image to be extracted
+    2. (Optional) Enter password
 
-Please, check with decryption that encryption really works! With some
-files it might result corrupt embedding.
+Important Notes:
+• Always test extraction to verify embedding worked
+• Originals are never modified
+• For sensitive data, always use password protection
+• Debug options available in source code
 
-This application do not alter original images!
+Security Warning: Steganography ≠ Encryption! 
+Hidden data may be detectable:
+• For best security, pre-encrypt messages
+• Or use built-in AES with strong password
 
-Steganography ≠ Encryption: It hides messages but doesn’t make them
-unreadable without extraction. Basic image analysis tools can detect 
-hidden data. For confidentiality, encrypt data first before embedding 
-or use password which is encrypted with AES. 
+Technical:
+- PNG: Best for embedding (lossless)
+- JPEG: May affect hidden data (lossy)
+- Capacity: ~1 bit per pixel/subpixel
 
-This script also supports non-secret use cases like copyright 
-watermarking (e.g., embedding invisible ownership markers).
-
-PNG vs. JPEG Workflows:
-    PNG’s lossless compression allows bit-level edits with minimal artifacts.
-    JPEG’s lossy DCT-based compression distorts hidden data during conversions.
-
-Capacity Limits: Data size depends on image resolution/color depth.
-Small messages work well; larger ones risk visible distortions (1 bit ≈ 1 pixel/subpixel).
-
-Used methods: Adaptive LSB Modification and DCT-based Steganography, hybrid method.
-"""
+Applications:
+- Secure communication
+- Copyright watermarking
+- Metadata embedding
+        """
         QMessageBox.information(self, "Help", help_text)
 
 
