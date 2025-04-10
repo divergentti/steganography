@@ -22,7 +22,7 @@
 
 import sys
 import os
-from PIL import Image, ExifTags
+from PIL import Image
 from PIL.ExifTags import TAGS
 import numpy as np
 from scipy.fftpack import dct, idct
@@ -33,12 +33,12 @@ from concurrent.futures import ThreadPoolExecutor  # For parallelization
 
 # pip install pyqt6
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QRadioButton, QGroupBox, QLineEdit, QPushButton, QComboBox, QCheckBox,
-    QLabel, QTextEdit, QFileDialog, QStatusBar, QMessageBox, QProgressBar
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy,
+    QRadioButton, QGroupBox, QLineEdit, QPushButton,  QCheckBox, QSplitter,
+    QLabel, QTextEdit, QFileDialog, QStatusBar, QMessageBox, QProgressBar, QLayout
 )
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import Qt, QMetaObject
+from PyQt6.QtCore import Qt, QEvent
 from PyQt6.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 
 # pip install pycryptodome
@@ -48,8 +48,9 @@ from Crypto.Util.Padding import pad, unpad
 
 debug_extract = False  # Set to False in production for speed
 debug_crypto = False  # Set to False in production for speed
-debug_embed = True  # Set to False in production for speed
-debug_gui = True  # Set to False in production for speed
+debug_embed = False  # Set to False in production for speed
+debug_gui = False  # Set to False in production for speed
+debug_verify = True # # Set to False in production for speed
 
 if debug_gui or debug_embed or debug_extract or debug_crypto:
     import faulthandler
@@ -58,7 +59,7 @@ if debug_gui or debug_embed or debug_extract or debug_crypto:
 
 # Number of worker threads for parallel processing
 NUM_WORKERS = max(1, os.cpu_count() - 1)  # Leave one core free for system
-VERSION = "0.0.4 - 09.04.2025"
+VERSION = "0.0.5 - 10.04.2025"
 
 
 class WorkerSignals(QObject):
@@ -194,10 +195,10 @@ class StegaMachine:
                     pixel = img_array[y, x].copy()
 
                     # Embed bits in all channels at once
-                    for i in range(3):  # RGB channels
+                    for z in range(3):  # RGB channels
                         # Clear LSBs based on capacity
                         mask = (1 << capacity) - 1
-                        pixel[i] &= (0xFF ^ mask)
+                        pixel[z] &= (0xFF ^ mask)
 
                         # Get bits to embed (as many as capacity allows)
                         bits_to_embed = 0
@@ -208,7 +209,7 @@ class StegaMachine:
                                 data_index += 1
 
                         # Embed bits
-                        pixel[i] |= bits_to_embed
+                        pixel[z] |= bits_to_embed
 
                     # Store the modified pixel
                     modified_pixels.append((y, x, pixel))
@@ -496,6 +497,7 @@ class StegaMachine:
 
     def hybrid_embed_message(self, image_path, message, password=None, progress_signal=None):
         """Optimized embedding with progress reporting"""
+        temp_png_path = ""
 
         try:
             # Convert to absolute path and verify existence
@@ -731,6 +733,26 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.cancel_btn.clicked.connect(self.cancel_operation)
 
+    def eventFilter(self, obj, event):
+        if obj == self.preview_label and event.type() == QEvent.Type.Resize:
+            self.update_preview_pixmap()
+        return super().eventFilter(obj, event)
+
+    def update_preview_pixmap(self):
+        """Scales the pixmap to fit within the label's current size"""
+        if hasattr(self, 'original_pixmap') and not self.original_pixmap.isNull():
+            # Use the full available width and height
+            available_width = self.preview_label.width()
+            available_height = self.preview_label.height()
+
+            scaled = self.original_pixmap.scaled(
+                available_width,
+                available_height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.preview_label.setPixmap(scaled)
+
     def cancel_operation(self):
         if self.worker:
             self.worker.cancel()
@@ -741,11 +763,11 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         layout = QVBoxLayout(central_widget)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetDefaultConstraint)
 
         # Mode and Input Type in same row
         mode_input_row = QHBoxLayout()
 
-        # Operation Mode
         self.mode_group = QGroupBox("Operation Mode")
         mode_layout = QHBoxLayout()
         self.encrypt_radio = QRadioButton("Encrypt")
@@ -756,7 +778,6 @@ class MainWindow(QMainWindow):
         self.mode_group.setLayout(mode_layout)
         mode_input_row.addWidget(self.mode_group)
 
-        # Input Type
         self.input_type_group = QGroupBox("Input Type")
         input_type_layout = QHBoxLayout()
         self.file_radio = QRadioButton("File")
@@ -797,22 +818,30 @@ class MainWindow(QMainWindow):
         button_row = QHBoxLayout()
         self.action_btn = QPushButton("Encrypt")
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setEnabled(False)  # Disabled by default
+        self.cancel_btn.setEnabled(False)
         button_row.addWidget(self.action_btn)
         button_row.addWidget(self.cancel_btn)
         layout.addLayout(button_row)
 
-        # Preview area
-        preview_layout = QHBoxLayout()
+        # --- Preview and EXIF area using QSplitter ---
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setStretchFactor(0, 3)  # Give more space to preview
+        splitter.setStretchFactor(1, 1)  # Less space to info panel
+        layout.addWidget(splitter)
 
         # Image preview
         self.preview_label = QLabel()
-        self.preview_label.setFixedSize(300, 300)
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_layout.addWidget(self.preview_label)
+        self.preview_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.preview_label.setMinimumSize(300, 300)  # Set a reasonable minimum size
+        self.preview_label.setStyleSheet("background-color: #f0f0f0; border: 1px solid #ccc;")
+        self.preview_label.installEventFilter(self)
+        splitter.addWidget(self.preview_label)
 
-        # File info and EXIF
-        right_panel = QVBoxLayout()
+        # Right panel with file info and EXIF
+        right_panel_widget = QWidget()
+        right_panel_layout = QVBoxLayout(right_panel_widget)
+        right_panel_widget.setMaximumWidth(250)
 
         file_info_group = QGroupBox("File Information")
         file_info_layout = QVBoxLayout()
@@ -821,14 +850,19 @@ class MainWindow(QMainWindow):
         file_info_layout.addWidget(self.file_size_label)
         file_info_layout.addWidget(self.file_type_label)
         file_info_group.setLayout(file_info_layout)
-        right_panel.addWidget(file_info_group)
+        right_panel_layout.addWidget(file_info_group)
 
         self.exif_text = QTextEdit()
         self.exif_text.setReadOnly(True)
-        right_panel.addWidget(self.exif_text)
+        right_panel_layout.addWidget(self.exif_text)
 
-        preview_layout.addLayout(right_panel)
-        layout.addLayout(preview_layout)
+
+        splitter.addWidget(right_panel_widget)
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+
+
+        layout.addWidget(splitter)
 
         # Progress
         self.progress_label = QLabel("Ready")
@@ -847,6 +881,12 @@ class MainWindow(QMainWindow):
         self.file_radio.toggled.connect(self.update_path_field)
         self.encrypt_checkbox.stateChanged.connect(self.toggle_password_field)
         self.threadpool = QThreadPool()
+
+        self.threadpool = QThreadPool()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_preview_pixmap()
 
     def set_error_bar_style(self):
         self.progress_bar.setStyleSheet("""
@@ -917,17 +957,16 @@ class MainWindow(QMainWindow):
             self.cancel_btn.setEnabled(False)
             self.status_bar.showMessage("Operation failed!")
 
-
     def create_menu(self):
         menu_bar = self.menuBar()
         help_menu = menu_bar.addMenu("Help")
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.show_help)
 
-    def toggle_password_field(self, state):
+    def toggle_password_field(self):
         self.password_edit.setEnabled(self.encrypt_checkbox.isChecked())
 
-    def update_ui_mode(self, checked):
+    def update_ui_mode(self):
         is_encrypt = self.encrypt_radio.isChecked()
         self.action_btn.setText("Encrypt" if is_encrypt else "Decrypt")
         self.message_label.setVisible(is_encrypt)
@@ -967,32 +1006,27 @@ class MainWindow(QMainWindow):
 
     def update_preview(self, path):
         if os.path.isfile(path):
-            if os.path.isfile(path):
-                try:
-                    pixmap = QPixmap(path)
-                    if not pixmap.isNull():
-                        # Create a temporary painter to ensure clean scaling
-                        scaled = pixmap.scaled(400, 400, Qt.AspectRatioMode.KeepAspectRatio)
-                        self.preview_label.setPixmap(scaled)
-
-                finally:
-                    # Explicit cleanup (not strictly necessary for QPixmap but good practice)
-                    del pixmap
-
-                try:
-                    size_bytes = os.path.getsize(path)
-                    size_kb = size_bytes / 1024
-                    self.file_size_label.setText(f"Size: {size_kb:.2f} KB")
-
-                    file_ext = os.path.splitext(path)[1].upper().replace('.', '') or 'Unknown'
-                    self.file_type_label.setText(f"Type: {file_ext}")
-                except Exception as e:
-                    self.file_size_label.setText("Size: Error")
-                    self.file_type_label.setText("Type: Error")
-            else:
+            try:
+                self.original_pixmap = QPixmap(path)
+                if not self.original_pixmap.isNull():
+                    self.update_preview_pixmap()
+            except Exception as e:
                 self.preview_label.clear()
-                self.file_size_label.setText("Size: N/A")
-                self.file_type_label.setText("Type: N/A")
+                print(f"Error loading preview: {str(e)}")
+                return
+            finally:
+                pass
+
+            try:
+                size_bytes = os.path.getsize(path)
+                size_kb = size_bytes / 1024
+                self.file_size_label.setText(f"Size: {size_kb:.2f} KB")
+
+                file_ext = os.path.splitext(path)[1].upper().replace('.', '') or 'Unknown'
+                self.file_type_label.setText(f"Type: {file_ext}")
+            except Exception as e:
+                self.file_size_label.setText(f"Size: Error {e}")
+                self.file_type_label.setText(f"Type: Error")
 
             try:
                 with Image.open(path) as img:
@@ -1003,10 +1037,14 @@ class MainWindow(QMainWindow):
 
         else:
             self.preview_label.clear()
-            self.file_size_label.setText("Size: N/A (Directory)")
-            self.file_type_label.setText("Type: Directory")
-            self.exif_text.setPlainText("No EXIF data for directories.")
-            return
+            if os.path.isdir(path):
+                self.file_size_label.setText("Size: N/A (Directory)")
+                self.file_type_label.setText("Type: Directory")
+                self.exif_text.setPlainText("No EXIF data for directories.")
+            else:
+                self.file_size_label.setText("Size: N/A")
+                self.file_type_label.setText("Type: N/A")
+                self.exif_text.setPlainText("No EXIF data available.")
 
     def get_exif_data(self, image):
         try:
@@ -1069,13 +1107,37 @@ class MainWindow(QMainWindow):
         # Create the worker
         if is_folder:
             worker = Worker(
-                lambda: self.process_folder(path, message, password, progress_signal=None)
+                lambda: self.process_folder(path, message, password)
             )
         else:
-            worker = Worker(
-                lambda: self.stego.hybrid_embed_message(path, message, password,
-                                                        progress_signal=worker.signals.progress)
-            )
+            # Standard encryption worker
+            def encrypt_with_verification():
+                # First, perform the encryption
+                output_path = self.stego.hybrid_embed_message(path, message, password,
+                                                              progress_signal=worker.signals.progress)
+
+                # If debugging is enabled and encryption succeeded, verify the result
+                if debug_verify and output_path:
+                    try:
+                        worker.signals.status.emit("Verifying encryption...")
+                        # Extract message from the output file
+                        extracted_message = self.stego.hybrid_extract_message(
+                            output_path,
+                            password,
+                            progress_callback=None  # Skip progress for verification
+                        )
+
+                        # Compare original and extracted messages
+                        if extracted_message == message:
+                            worker.signals.status.emit("Verification successful!")
+                        else:
+                            worker.signals.status.emit("WARNING: Verification failed - messages don't match!")
+                    except Exception as e:
+                        worker.signals.status.emit(f"WARNING: Verification failed with error: {str(e)}")
+
+                return output_path
+
+            worker = Worker(encrypt_with_verification)
 
         worker.signals.progress.connect(self.on_encrypt_progress)
         worker.signals.result.connect(lambda output_path: self.on_encrypt_result(output_path, is_folder))
@@ -1097,22 +1159,6 @@ class MainWindow(QMainWindow):
 
         self.action_btn.setEnabled(False)
         self.progress_bar.setValue(0)
-
-        def on_progress(percent):
-            phases = {
-                10: "Extracting length...",
-                30: "Analyzing DCT...",
-                50: "Decoding message...",
-                80: "Verifying markers...",
-                100: "Done"
-            }
-            self.progress_bar.setValue(percent)
-            self.progress_label.setText(phases.get(percent, "Processing..."))
-            self.progress_bar.setValue(percent)
-            if percent == 100:
-                self.status_bar.showMessage("Decryption complete!")
-            elif percent == -1:
-                self.status_bar.showMessage("Decryption failed")
 
         def on_result(message):
             self.action_btn.setEnabled(True)
@@ -1156,7 +1202,7 @@ class MainWindow(QMainWindow):
         worker.signals.finished.connect(lambda: self.action_btn.setEnabled(True))
         self.threadpool.start(worker)
 
-    def process_folder(self, folder_path, message, password=None, progress_signal=None):
+    def process_folder(self, folder_path, message, password=None):
         supported_ext = ('.png', '.jpg', '.jpeg', '.bmp')
         files = []
         folder_path = os.path.abspath(folder_path)
