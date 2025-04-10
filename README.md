@@ -2,29 +2,34 @@
 
 This project is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining adaptive LSB and DCT-based methods to hide secret messages within images. It also offers optional AES encryption to secure the hidden message. The tool preserves image quality and metadata—such as EXIF data—allowing the final file to retain important information from the original image.
 
+Video about how this application works at my channel https://www.youtube.com/@Controvergent
+
 **Motivation**
 
-The project was initiated last week, inspired by a discussion on LinkedIn with Santeri Kallios. While C2PA markings provide a robust way to authenticate AI-generated images, I believed that the potential to hide additional information—such as secret messages, digital watermarks, or provenance data—in images is much greater. This tool demonstrates that hidden data can be seamlessly integrated into images without noticeably affecting their quality.
+The project was initiated last week, inspired by a discussion on LinkedIn with Santeri Kallio. While C2PA markings provide a robust way to authenticate AI-generated images, I believed that the potential to hide additional information—such as secret messages, digital watermarks, or provenance data—in images is much greater. This tool demonstrates that hidden data can be seamlessly integrated into images without noticeably affecting their quality.
 
 **Features**
 
-Hybrid Embedding Techniques:
-    Adaptive LSB: Uses an adaptive algorithm to choose the number of least significant bits based on local image complexity.
-    DCT-based Embedding: Incorporates discrete cosine transform (DCT) to hide bits within the mid-frequency coefficients for enhanced robustness.
+Hybrid Embedding Techniques: 
+
+- Adaptive LSB: Uses an adaptive algorithm to choose the number of least significant bits based on local image complexity.
+- DCT-based Embedding: Incorporates discrete cosine transform (DCT) to hide bits within the mid-frequency coefficients for enhanced robustness.
 
 Optional AES Encryption:
-    Secure your hidden message with AES encryption. The tool uses PBKDF2 for key derivation and includes proper initialization vector (IV) and salt handling.
+- Secure your hidden message with AES encryption. The tool uses PBKDF2 for key derivation and includes proper initialization vector (IV) and salt handling.
 
 EXIF Data Preservation:
-    Original image EXIF metadata is extracted and preserved during the embedding process so that important file information is retained in the final output.
+- Original image EXIF metadata is extracted and preserved during the embedding process so that important file information is retained in the final output.
 
 GUI Application:
-    Built with PyQt6, offering a user-friendly interface for selecting files, entering messages, and monitoring progress.
+- Built with PyQt6, offering a user-friendly interface for selecting files, entering messages, and monitoring progress.
 
 Cross-Platform Compatibility:
-    Designed for Windows and Linux, with plans for future distro packages.
+- Designed for Windows and Linux. Linux executable onefile is found under bin-directory (115,6 Mb), packaged with nuitka
 
 **Requirements**
+
+If you prefer to test from source code (under src), you need:
 
 Python 3.8 or higher
 PyQt6
@@ -48,6 +53,7 @@ The source code is commented and with options to enable debugging.
 **Usage**
 
 Run the main application file: python stegaGUI-pwd.py
+
 The GUI offers two modes:
 
 Encrypt:
@@ -65,17 +71,16 @@ The tool processes the image by embedding the message (including a checksum for 
 
 **Future Work**
 
-Distribution Packaging:
-    Creating standalone packages for Windows and Linux to simplify installation for end-users.
-    Enhanced Format Support: improvements to handle more image formats and additional metadata (if required).
-    Performance Optimizations: ongoing improvements to the embedding/extraction process for speed and accuracy.
+Add support for webp, bmp etc.
 
 **Contributing**
-Contributions are welcome! Feel free to fork the repository and submit pull requests. Please open an issue first to discuss changes you’d like to see.
+Contributions are welcome! Feel free to fork the repository and submit pull requests. 
+Please open an issue first to discuss changes you’d like to see.
 
 **License**
 This project is licensed under the MIT License.
 
 **Acknowledgments**
 Santeri Kallio: A special thanks for sparking the idea on LinkedIn with his post on using C2PA markings for AI-generated images.
+
 Open Source Libraries: Thanks to the developers of PyQt6, Pillow, OpenCV, NumPy, SciPy, and PyCryptodome for making this project possible.
