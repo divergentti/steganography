@@ -1,0 +1,5 @@
+Program:Script/Wacapew.A!ml is false positive
+
+Microsoft explains this "Heuristic plaa plaa plaa" ... but it really is not virus.
+
+If you use Windows and this exe-file, then you need to add exception to your Defender.

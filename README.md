@@ -1,88 +1,155 @@
-**Steganography Tool**
+# Steganography Tool
 
-This project is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining adaptive LSB and DCT-based methods to hide secret messages within images. It also offers optional AES encryption to secure the hidden message. The tool preserves image quality and metadata—such as EXIF data—allowing the final file to retain important information from the original image.
+This is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining **adaptive LSB** and **DCT-based** methods to hide secret messages within images. Optional **AES encryption** is also supported to secure the hidden message. The tool preserves image quality and **EXIF metadata**, allowing the output image to retain key info from the original.
 
-Video about how this application works at my channel https://www.youtube.com/@Controvergent
+**Supported formats:** `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`
 
-Sample images under samples. Password is qwerty.
+📺 **Video demo:** [https://www.youtube.com/@Controvergent](https://www.youtube.com/@Controvergent)  
+🖼️ **Samples:** Found in the `samples/` folder — password is `qwerty`.
 
-**Motivation**
+---
 
-The project was initiated last week, inspired by a discussion on LinkedIn with Santeri Kallio. While C2PA markings provide a robust way to authenticate AI-generated images, I believed that the potential to hide additional information—such as secret messages, digital watermarks, or provenance data—in images is much greater. This tool demonstrates that hidden data can be seamlessly integrated into images without noticeably affecting their quality.
+## Motivation
 
-**Features**
+This project started in April 2025, inspired by a LinkedIn discussion with **Santeri Kallio**, where the topic was:
 
-Hybrid Embedding Techniques: 
+> *"ChatGPT:llä tehtyihin kuviin lisätään dataa mikä paljastaa että tekoäly on generoinut sen."*  
+> *(Posted on 4.4.2025)*
 
-- Adaptive LSB: Uses an adaptive algorithm to choose the number of least significant bits based on local image complexity.
-- DCT-based Embedding: Incorporates discrete cosine transform (DCT) to hide bits within the mid-frequency coefficients for enhanced robustness.
+While **C2PA** provides robust AI image attribution, I wanted to explore the broader potential of hiding extra data inside images—whether it’s secret messages, watermarks, or provenance data. This tool demonstrates how hidden content can be embedded *without visibly degrading* the image.
 
-Optional AES Encryption:
-- Secure your hidden message with AES encryption. The tool uses PBKDF2 for key derivation and includes proper initialization vector (IV) and salt handling.
+---
 
-EXIF Data Preservation:
-- Original image EXIF metadata is extracted and preserved during the embedding process so that important file information is retained in the final output.
+## Features
 
-GUI Application:
-- Built with PyQt6, offering a user-friendly interface for selecting files, entering messages, and monitoring progress.
+### 🧠 Hybrid Embedding Techniques
 
-Cross-Platform Compatibility:
-- Designed for Windows and Linux. Linux executable onefile is found under bin-directory (115,6 Mb), packaged with nuitka
+- **Adaptive LSB:** Dynamically adjusts bit depth based on local image complexity.
+- **DCT-based embedding:** Uses mid-frequency DCT coefficients for more robust hiding.
 
-**Requirements**
+### 🔐 Optional AES Encryption
 
-If you prefer to test from source code (under src), you need:
+- Encrypt messages with AES (CBC mode)
+- Uses `PBKDF2` for key derivation
+- Random salt and IV are automatically managed
 
-Python 3.8 or higher
-PyQt6
-Pillow
-OpenCV-Python
-NumPy
-SciPy
-PyCryptodome
+### 🧾 Metadata Preservation
 
-**Installation if using source code**
+- Original **EXIF metadata** is preserved in the final output image
 
-1. Clone the repository: git clone https://github.com/divergentti/steganography.git
-2. cd steganography
-3. Create a virtual environment (optional but recommended):
-- python -m venv venv
-- source venv/bin/activate  # On Windows: venv\Scripts\activate
-- Install the required packages: pip install -r requirements.txt
+### 🖥️ GUI Interface
 
-The source code is commented and with options to enable debugging.
+- Built using **PyQt6**
+- Simple interface for file selection, encryption/decryption, and message entry
 
-**Usage**
+### 💻 Cross-Platform
 
-Run the main application file: python stegaGUI-pwd.py
+- Tested and packaged for both **Windows** and **Linux**
+- Built using **Nuitka**
+  - Linux binary: `bin/` directory (run with `chmod +x`)
+  - Windows EXE: `exe/` directory
 
-The GUI offers two modes:
+---
 
-Encrypt:
-     Select a file or folder.
-     Enter your secret message.
-     (Optional) Enable AES encryption and set a password.
-      Click "Encrypt" to hide your message in the image.
+## Requirements (for source version)
 
-Decrypt:
-    Select the encrypted image.
-    (If required) Enter the password.
-    Click "Decrypt" to extract and (if applicable) decrypt the message.
+Install Python dependencies (Python 3.8+):
 
-The tool processes the image by embedding the message (including a checksum for integrity) and preserves any EXIF metadata from the original file.
+\`\`\`bash
+pip install -r requirements.txt
+\`\`\`
 
-**Future Work**
+Main dependencies:
 
-Add support for webp, bmp etc.
+- Python ≥ 3.8
+- PyQt6
+- Pillow
+- OpenCV-Python
+- NumPy
+- SciPy
+- PyCryptodome
 
-**Contributing**
-Contributions are welcome! Feel free to fork the repository and submit pull requests. 
-Please open an issue first to discuss changes you’d like to see.
+---
 
-**License**
-This project is licensed under the MIT License.
+## Installation (from source)
 
-**Acknowledgments**
-Santeri Kallio: A special thanks for sparking the idea on LinkedIn with his post on using C2PA markings for AI-generated images.
+\`\`\`bash
+git clone https://github.com/divergentti/steganography.git
+cd steganography
 
-Open Source Libraries: Thanks to the developers of PyQt6, Pillow, OpenCV, NumPy, SciPy, and PyCryptodome for making this project possible.
+# Optional virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+\`\`\`
+
+The code is modular and split into:
+- GUI layer
+- Encryption/decryption engine
+
+Comments and optional debug flags are included.
+
+---
+
+## Usage
+
+Run the main application:
+
+\`\`\`bash
+python Stegatool-v0-1-0.py
+\`\`\`
+
+### Encryption Mode
+
+1. Select image or folder
+2. Enter message
+3. (Optional) Enable AES and set password
+4. Click **Encrypt**
+
+### Decryption Mode
+
+1. Select encrypted image
+2. (If used) Enter password
+3. Click **Decrypt**
+
+✅ The tool uses checksums for message integrity and preserves EXIF metadata during processing.
+
+---
+
+## Future Work
+
+- Add CLI support to `endecrypter.py`
+- Expand image format support
+- Add a **Settings** page:
+  - Custom DCT coefficient positions
+  - Batch size
+  - Embedding parameters
+
+---
+
+## Contributing
+
+Contributions welcome!  
+Please fork the repo and submit a pull request.
+
+➡️ Before larger changes, open an issue to discuss your idea.
+
+---
+
+## License
+
+This project is licensed under the **MIT License**.
+
+---
+
+## Acknowledgments
+
+- **Santeri Kallio** – for the initial spark and discussion on LinkedIn
+- Open-source libraries:
+  - PyQt6
+  - Pillow
+  - OpenCV
+  - NumPy
+  - SciPy
+  - PyCryptodome
