@@ -48,7 +48,8 @@ While **C2PA** provides robust AI image attribution, I wanted to explore the bro
 - Built using **Nuitka**
   - Linux binary: `bin/` directory (run with `chmod +x`)
   - Windows EXE: `exe/` directory
-Note! Download RAW to get binary file!
+
+**Note! Download RAW to get binary file!**
 ---
 
 ## Requirements (for source version)
