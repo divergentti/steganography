@@ -27,13 +27,13 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka Stegatool-v0-1-1.py ^
-            --standalone ^
-            --onefile ^
-            --windows-disable-console ^
-            --enable-plugin=pyqt6 ^
-            --output-dir=build ^
-            --lto=yes ^
+          nuitka Stegatool-v0-1-1.py `
+            --standalone `
+            --onefile `
+            --windows-disable-console `
+            --enable-plugin=pyqt6 `
+            --output-dir=build `
+            --lto=yes `
             --follow-imports
 
       - name: Upload .exe as artifact
