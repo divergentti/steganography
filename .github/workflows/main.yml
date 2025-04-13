@@ -37,7 +37,8 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=build --windows-console-mode=disable src\Stegatool-v0-1-1.py
+          cd src
+          nuitka Stegatool-v0-1-1.py --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=../build --windows-console-mode=disable
 
       - name: Upload .exe as artifact
         uses: actions/upload-artifact@v4
@@ -82,11 +83,12 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka --standalone --onefile --enable-plugin=pyqt6 --output-dir=build --lto=yes --follow-imports src/Stegatool-v0-1-1.py
+          cd src
+          nuitka Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=../build --lto=yes --follow-imports
 
       - name: Verify build directory
         run: |
-          ls -la build
+          ls -la ../build
 
       - name: Download appimagetool
         run: |
@@ -95,7 +97,7 @@ jobs:
 
       - name: Create AppImage
         run: |
-          ./appimagetool-x86_64.AppImage build/Stegatool-v0-1-1
+          ./appimagetool-x86_64.AppImage ../build/Stegatool-v0-1-1
 
       - name: Verify AppImage
         run: |
