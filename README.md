@@ -39,8 +39,9 @@ Requirements: Python 3.8+, tested on Windows and Linux.
 
 If I manage to free up space (now almost 1Gb) so that I can upload binaries:
 
-    Linux: bin/stegatool.bin (run chmod +x bin/stegatool first).
-    Windows: exe/stegatool.exe.
+    Download proper zip-version from releases https://github.com/divergentti/steganography/releases/tag/steganography
+    Linux AppImage: change chmod +x if needed
+   
     Note: Download binaries as raw files from the GitHub repository.
 
 ## Usage
