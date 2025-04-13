@@ -51,10 +51,9 @@ Requirements: Python 3.8+, tested on Windows and Linux.
 
 Using binaries (one file runnable made with Nuitka and Github Actions workflows):
 
-    Download proper zip-version from [releases](https://github.com/divergentti/steganography/releases/tag/steganography)
-    Linux AppImage: change chmod +x if needed
-   
-    Note: Download binaries as raw files from the GitHub repository.
+ Download proper zip-version from [releases](https://github.com/divergentti/steganography/releases/tag/steganography)
+
+Linux AppImage: change chmod +x if needed
 
 ## Usage
 
