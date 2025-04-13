@@ -80,32 +80,41 @@ jobs:
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage --appimage-extract
+      - name: Debug AppDir structure before creation
+        run: |
+          pwd
+          ls -la
       - name: Create AppDir structure
         run: |
+          # Create basic structure
           mkdir -p AppDir/usr/bin
           cp build/Stegatool-v0-1-1.bin AppDir/usr/bin/stegatool
           chmod +x AppDir/usr/bin/stegatool
           
           # Create AppRun script
-          echo '#!/bin/bash
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
           HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "$HERE/usr/bin/stegatool" "$@"' > AppDir/AppRun
+          exec "$HERE/usr/bin/stegatool" "$@"
+          EOF
           chmod +x AppDir/AppRun
           
-          # Create desktop entry
-          mkdir -p AppDir/usr/share/applications
-          echo "[Desktop Entry]
-          Type=Application
+          # Create desktop entry - IMPORTANT: Must be named the same as the AppDir
+          cat > AppDir/stegatool.desktop << EOF
+          [Desktop Entry]
           Name=Stegatool
           Exec=stegatool
           Icon=stegatool
-          Categories=Utility;" > AppDir/usr/share/applications/stegatool.desktop
+          Type=Application
+          Categories=Utility;
+          EOF
           
-          # Create icon directory
+          # Create icon directory and icon
           mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          convert -size 256x256 xc:white -fill black -pointsize 24 -gravity center -annotate 0 "Stegatool" AppDir/stegatool.png
           
-          # Create a simple icon
-          convert -size 256x256 xc:white -fill black -pointsize 24 -gravity center -annotate 0 "Stegatool" AppDir/usr/share/icons/hicolor/256x256/apps/stegatool.png || echo "Icon creation failed, continuing anyway"
+          # Debug: List the AppDir structure to verify
+          find AppDir -type f | sort
       - name: Create AppImage using extracted appimagetool
         run: |
           ./squashfs-root/AppRun AppDir Stegatool-v0-1-1-x86_64.AppImage
