@@ -17,7 +17,7 @@ A powerful, user-friendly tool for hiding and extracting secret messages in imag
 *Note*: Steganography hides data but doesn't guarantee undetectability. For sensitive data, always use AES encryption with a strong password.
 
 
-## Installation
+## Installation from source codes
 
 1. Clone the repository:
    ```bash
@@ -31,13 +31,13 @@ A powerful, user-friendly tool for hiding and extracting secret messages in imag
 3. Install dependecies:
     pip install pillow pyqt6 pycryptodome numpy scipy opencv-python pydub reedsolo
 
-    # or pip install -r requirements.txt
+    (or pip install -r requirements.txt)
 
 4.  Run the tool python Stegatool-v0-1-1.py
 
 Requirements: Python 3.8+, tested on Windows and Linux.
 
-If I manage to free up space (now almost 1Gb) so that I can upload binaries:
+Using binaries (one file runnable made with Nuitka and Github Actions workflows):
 
     Download proper zip-version from releases https://github.com/divergentti/steganography/releases/tag/steganography
     Linux AppImage: change chmod +x if needed
