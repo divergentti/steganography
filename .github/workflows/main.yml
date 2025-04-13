@@ -77,11 +77,22 @@ jobs:
             --lto=yes \
             --follow-imports
 
-      - name: Create AppImage
+      - name: Verify build directory
+        run: |
+          ls -la build
+
+      - name: Download appimagetool
         run: |
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
+
+      - name: Create AppImage
+        run: |
           ./appimagetool-x86_64.AppImage build/Stegatool-v0-1-1
+
+      - name: Verify AppImage
+        run: |
+          ls -la
 
       - name: Upload AppImage as artifact
         uses: actions/upload-artifact@v4
