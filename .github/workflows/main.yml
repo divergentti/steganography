@@ -1,0 +1,48 @@
+name: Build Nuitka EXE for Windows
+
+on:
+  push:
+    branches:
+      - main
+  release:
+    types: [created]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install nuitka
+          pip install pyqt6 pillow numpy opencv-python scipy reedsolo pydub pycryptodome
+
+      - name: Build with Nuitka
+        run: |
+          nuitka Stegatool-v0-1-1.py ^
+            --standalone ^
+            --onefile ^
+            --windows-disable-console ^
+            --enable-plugin=pyqt6 ^
+            --output-dir=build ^
+            --lto=yes ^
+            --follow-imports
+
+      - name: Upload .exe as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stegatool-Windows
+          path: build/Stegatool-v0-1-1.exe
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/Stegatool-v0-1-1.exe
