@@ -1,4 +1,4 @@
-name: Build Nuitka EXE for Windows
+name: Build Nuitka EXE for Windows and Linux AppImage
 
 on:
   push:
@@ -41,8 +41,56 @@ jobs:
         with:
           name: Stegatool-Windows
           path: build/Stegatool-v0-1-1.exe
+
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: build/Stegatool-v0-1-1.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf desktop-file-utils libgirepository1.0-dev
+          pip install nuitka
+          pip install pyqt6 pillow numpy opencv-python scipy reedsolo pydub pycryptodome
+
+      - name: Build with Nuitka
+        run: |
+          nuitka Stegatool-v0-1-1.py \
+            --standalone \
+            --onefile \
+            --enable-plugin=pyqt6 \
+            --output-dir=build \
+            --lto=yes \
+            --follow-imports
+
+      - name: Create AppImage
+        run: |
+          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage build/Stegatool-v0-1-1
+
+      - name: Upload AppImage as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Stegatool-Linux
+          path: Stegatool-v0-1-1-x86_64.AppImage
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Stegatool-v0-1-1-x86_64.AppImage
