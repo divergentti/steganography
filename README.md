@@ -1,11 +1,70 @@
 # Steganography Tool
 
-This is a cross-platform (Windows and Linux) GUI steganography tool that supports hybrid embedding techniques, combining **adaptive LSB** and **DCT-based** methods to hide secret messages within images. Optional **AES encryption** is also supported to secure the hidden message. The tool preserves image quality and **EXIF metadata**, allowing the output image to retain key info from the original.
+A powerful, user-friendly tool for hiding and extracting secret messages in images and audio files using advanced steganography techniques. Version 0.1.1 brings exciting support for WAV (16-bit PCM) and MP3 files, alongside improved progress feedback for a smoother experience.
 
-**Supported formats:** `.jpg`, `.jpeg`, `.png`, `.bmp`, `.webp`
+© 2025 Jari Hiltunen / Divergentti - Licensed under MIT.
 
-📺 **Video demo:** [https://www.youtube.com/@Controvergent](https://www.youtube.com/@Controvergent)  
-🖼️ **Samples:** Found in the `samples/` folder — password is `qwerty`.
+## Features
+
+- **Image Support**: Embed/extract messages in PNG, JPG, JPEG, BMP, and WEBP using hybrid LSB + DCT methods.
+- **Audio Support**: New in v0.1.1! Hide messages in WAV (16-bit PCM) and MP3 files with fixed 1-bit LSB and Reed-Solomon error correction (~33% per chunk).
+- **AES Encryption**: Optional password protection for secure message embedding.
+- **GUI Feedback**: Real-time progress updates for both image and audio processing (e.g., "Embedding message...", "Encryption complete!").
+- **Preserves Metadata**: Maintains image EXIF data; non-destructive to original files.
+- **Robustness**: Survives common image conversions; audio embedding reliable in WAV, with MP3 handling lossy compression challenges.
+- **Applications**: Secure communication, watermarking, metadata embedding.
+
+*Note*: Steganography hides data but doesn't guarantee undetectability. For sensitive data, always use AES encryption with a strong password.
+
+
+## Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/divergentti/steganography.git
+   cd steganography
+
+2. Make virtual environment and activate it:
+    python -m venv venv
+    source venv/bin/activate  # Windows: venv\Scripts\activate
+
+3. Install dependecies:
+    pip install pillow pyqt6 pycryptodome numpy scipy opencv-python pydub reedsolo
+
+    # or pip install -r requirements.txt
+
+4.  Run the tool python Stegatool-v0-1-1.py
+
+Requirements: Python 3.8+, tested on Windows and Linux.
+
+If I manage to free up space (now almost 1Gb) so that I can upload binaries:
+
+    Linux: bin/stegatool.bin (run chmod +x bin/stegatool first).
+    Windows: exe/stegatool.exe.
+    Note: Download binaries as raw files from the GitHub repository.
+
+## Usage
+
+Encrypt
+
+    Launch the GUI and select "Encrypt" mode.
+    Choose an image (PNG, JPG, etc.), WAV, or MP3 file, or an image folder.
+    Enter your secret message.
+    (Optional) Enable AES encryption and set a password.
+    Click "Encrypt" to generate encrypted_[filename].
+
+Decrypt
+
+    Select "Decrypt" mode.
+    Choose the encrypted image or audio file.
+    Enter the password if AES was used.
+    Click "Decrypt" to reveal the hidden message.
+
+Tips
+
+    Use WAV for reliable audio embedding; MP3 is lossy and less dependable.
+    Test extraction to verify embedding success.
+    Check "Help > About" in the GUI for detailed guidance.
 
 ---
 
@@ -20,112 +79,19 @@ While **C2PA** provides robust AI image attribution, I wanted to explore the bro
 
 ---
 
-## Features
+## Technical Details
 
-### 🧠 Hybrid Embedding Techniques
+    Images:
+        Hybrid LSB (adaptive, 1-3 bits/pixel) + DCT embedding.
+        Capacity: ~1 bit/pixel.
+        Formats: PNG (lossless, best), JPG/WEBP (lossy, riskier).
+    Audio:
+        Fixed 1-bit LSB, 4000-sample offset, 50-byte chunks with 100-byte parity.
+        Capacity: 1 bit/sample.
+        Formats: WAV (lossless, reliable), MP3 (320kbps recommended, ~33% error correction).
+    Security: AES-CBC with PBKDF2; checksums ensure integrity.
 
-- **Adaptive LSB:** Dynamically adjusts bit depth based on local image complexity.
-- **DCT-based embedding:** Uses mid-frequency DCT coefficients for more robust hiding.
-
-### 🔐 Optional AES Encryption
-
-- Encrypt messages with AES (CBC mode)
-- Uses `PBKDF2` for key derivation
-- Random salt and IV are automatically managed
-
-### 🧾 Metadata Preservation
-
-- Original **EXIF metadata** is preserved in the final output image
-
-### 🖥️ GUI Interface
-
-- Built using **PyQt6**
-- Simple interface for file selection, encryption/decryption, and message entry
-
-### 💻 Cross-Platform
-
-- Tested and packaged for both **Windows** and **Linux**
-- Built using **Nuitka**
-  - Linux binary: `bin/` directory (run with `chmod +x`)
-  - Windows EXE: `exe/` directory
-
-**Note! Download RAW to get binary file!**
----
-
-## Requirements (for source version)
-
-Install Python dependencies (Python 3.8+):
-
-\`\`\`bash
-pip install -r requirements.txt
-\`\`\`
-
-Main dependencies:
-
-- Python ≥ 3.8
-- PyQt6
-- Pillow
-- OpenCV-Python
-- NumPy
-- SciPy
-- PyCryptodome
-
----
-
-## Installation (from source)
-
-\`\`\`bash
-git clone https://github.com/divergentti/steganography.git
-cd steganography
-
-# Optional virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-pip install -r requirements.txt
-\`\`\`
-
-The code is modular and split into:
-- GUI layer
-- Encryption/decryption engine
-
-Comments and optional debug flags are included.
-
----
-
-## Usage
-
-Run the main application:
-
-\`\`\`bash
-python Stegatool-v0-1-0.py
-\`\`\`
-
-### Encryption Mode
-
-1. Select image or folder
-2. Enter message
-3. (Optional) Enable AES and set password
-4. Click **Encrypt**
-
-### Decryption Mode
-
-1. Select encrypted image
-2. (If used) Enter password
-3. Click **Decrypt**
-
-✅ The tool uses checksums for message integrity and preserves EXIF metadata during processing.
-
----
-
-## Future Work
-
-- Add CLI support to `endecrypter.py`
-- Expand image format support
-- Add a **Settings** page:
-  - Custom DCT coefficient positions
-  - Batch size
-  - Embedding parameters
+See endecrypter.py for implementation details and debug options.
 
 ---
 
@@ -154,3 +120,18 @@ This project is licensed under the **MIT License**.
   - NumPy
   - SciPy
   - PyCryptodome
+- Grok 3 for unbeliviably good refractoring and advices for audio encryption!
+
+
+## Changelog
+
+Version 0.1.1 (April 13, 2025)
+
+    Added: Support for WAV (16-bit PCM) and MP3 embedding/extraction using fixed 1-bit LSB with Reed-Solomon error correction.
+    Improved: GUI now shows progress for audio processing (e.g., "Preparing audio...", "Decryption complete!").
+    Updated: Help guide includes audio support details and MP3 lossy compression warning.
+    Fixed: Enhanced error handling for audio extraction (e.g., checksum failures, invalid headers).
+    Optimized: Maintains performance for large files with threaded processing.
+
+See endecrypter.py for technical details and debug options.
+

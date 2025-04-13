@@ -35,7 +35,12 @@ from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Util.Padding import pad, unpad
 from concurrent.futures import ThreadPoolExecutor  # For parallelization
 
-debug_extract = False  # Set to False in production for speed
+# Audio encryption
+import wave
+from pydub import AudioSegment
+from reedsolo import RSCodec, ReedSolomonError
+
+debug_extract = True  # Set to False in production for speed
 debug_crypto = False  # Set to False in production for speed
 debug_embed = False  # Set to False in production for speed
 
@@ -474,18 +479,569 @@ class StegaMachine:
 
         return binary_message
 
-    # ------------------ Optimized Hybrid Steganography Functions ------------------
+    # --- audio related ---
 
-    def hybrid_embed_message(self, image_path, message, password=None, progress_signal=None):
-        """Optimized embedding with progress reporting"""
-        temp_png_path = ""
+    def get_audio_embedding_capacity(self, complexity, threshold_low=300, threshold_high=1500):
+        """Determine LSB capacity based on audio complexity.
+
+        Args:
+            self: Instance of StegaMachine.
+            complexity: Complexity metric (e.g., standard deviation) of audio block.
+            threshold_low: Lower complexity threshold for 1-bit embedding.
+            threshold_high: Upper complexity threshold for 2-bit embedding.
+
+        Returns:
+            Integer capacity (1, 2, or 3 bits).
+        """
+        if complexity < threshold_low:
+            return 1
+        elif complexity < threshold_high:
+            return 2
+        else:
+            return 3
+
+    def audio_adaptive_lsb_embed(self, samples: np.ndarray, binary_message: str) -> Tuple[np.ndarray, int]:
+        """Embed a binary message into audio samples using adaptive LSB.
+
+        Args:
+            samples: Numpy array of audio samples (int16).
+            binary_message: Binary string to embed.
+
+        Returns:
+            Tuple of modified samples and number of embedded message bits.
+        """
+        message_bits = np.array([int(bit) for bit in binary_message], dtype=np.uint8)
+        message_length = len(message_bits)
+        sample_count = len(samples)
+
+        if message_length > sample_count * 3:
+            raise ValueError(f"Message too large: {message_length} bits but only {sample_count * 3} bits available.")
+
+        modified_samples = samples.copy()
+        data_index = 0
+
+        block_size = 512
+        start_sample = 1000  # Skip first ~20ms
+        for i in range(start_sample, sample_count, block_size):
+            if data_index >= message_length:
+                break
+
+            block = samples[i:i + block_size]
+            if len(block) < 2:
+                continue
+
+            complexity = np.std(block)
+            if complexity < 100:
+                continue
+
+            capacity = self.get_audio_embedding_capacity(complexity)
+
+            if debug_embed:
+                print(f"Block {i//block_size}: complexity={complexity}, capacity={capacity}")
+
+            for j in range(len(block)):
+                if data_index >= message_length:
+                    break
+                sample_idx = i + j
+
+                mask = (1 << capacity) - 1
+                modified_samples[sample_idx] &= ~mask
+
+                bits_to_embed = 0
+                for k in range(capacity):
+                    if data_index < message_length:
+                        bits_to_embed |= message_bits[data_index] << k
+                        data_index += 1
+                modified_samples[sample_idx] |= bits_to_embed
+
+        if data_index < message_length:
+            raise ValueError(f"Could only embed {data_index}/{message_length} bits.")
+
+        return modified_samples, message_length
+
+    def audio_adaptive_lsb_extract(self, samples: np.ndarray, message_length: int) -> str:
+        """Extract a binary message from audio samples using adaptive LSB.
+
+        Args:
+            self: Instance of StegaMachine.
+            samples: Numpy array of audio samples.
+            message_length: Number of bits to extract.
+
+        Returns:
+            Extracted binary string.
+        """
+        if message_length > len(samples) * 3:
+            raise ValueError(f"Requested {message_length} bits, but only {len(samples) * 3} bits available.")
+
+        extracted_bits = []
+
+        block_size = 512
+        start_sample = 1000
+        for i in range(start_sample, len(samples), block_size):
+            if len(extracted_bits) >= message_length:
+                break
+
+            block = samples[i:i + block_size]
+            if len(block) < 2:
+                continue
+
+            complexity = np.std(block)
+            if complexity < 100:
+                continue
+
+            capacity = self.get_audio_embedding_capacity(complexity)
+
+            for j in range(len(block)):
+                if len(extracted_bits) >= message_length:
+                    break
+                sample = samples[i + j]
+                for k in range(capacity):
+                    if len(extracted_bits) < message_length:
+                        bit = (sample >> k) & 1
+                        extracted_bits.append(bit)
+
+        return ''.join(str(bit) for bit in extracted_bits)[:message_length]
+
+    def embed_audio_message(self, audio_path: str, message: str, password: str = None, progress_signal=None) -> str:
+        """Embed a message into a WAV or MP3 file using fixed 1-bit LSB with Reed-Solomon.
+
+        Args:
+            audio_path: Path to input audio file.
+            message: Message to embed.
+            password: Optional password for AES encryption.
+            progress_signal: Optional signal for progress updates.
+
+        Returns:
+            Path to the output audio file.
+        """
+        abs_path = os.path.abspath(audio_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"Audio file not found at {abs_path}")
+
+        file_ext = os.path.splitext(abs_path)[1].lower()
+        if file_ext not in ('.wav', '.mp3'):
+            raise ValueError(f"Unsupported audio format: {file_ext}")
+
+        if progress_signal:
+            try:
+                progress_signal.emit(10)  # Preparing audio
+            except Exception as e:
+                if debug_embed:
+                    print(f"Progress signal error: {str(e)}")
+
+        # Prepare message
+        message_with_prefix = self._aes_encrypt(message, password) if password else message
+        checksum = self._calculate_checksum(message_with_prefix)
+        full_message = f"{self.START_CHAR}{checksum}{message_with_prefix}{self.STOP_CHAR}"
+
+        if progress_signal:
+            try:
+                progress_signal.emit(30)  # Encoding message
+            except Exception as e:
+                if debug_embed:
+                    print(f"Progress signal error: {str(e)}")
+
+        # Convert to bytes
+        message_bytes = full_message.encode('utf-8')
+        message_length = len(message_bytes)
+
+        # Split into chunks and pad
+        chunk_size = 50  # Max data bytes per RS chunk
+        chunks = [message_bytes[i:i + chunk_size] for i in range(0, message_length, chunk_size)]
+        padded_chunks = [bytearray(chunk) + bytearray(chunk_size - len(chunk)) if len(chunk) < chunk_size else chunk for
+                         chunk in chunks]
+        chunk_count = len(padded_chunks)
+
+        # Apply Reed-Solomon to each chunk
+        rs = RSCodec(100)  # Corrects up to 50 bytes
+        rs_encoded_chunks = [rs.encode(chunk) for chunk in padded_chunks]
+
+        if debug_embed:
+            print(f"Message length: {message_length}")
+            print(f"Chunk count: {chunk_count}")
+            for i, chunk in enumerate(rs_encoded_chunks):
+                print(f"Chunk {i} encoded bytes: {[hex(b) for b in chunk][:20]}...")
+            message_binary_debug = ''.join(
+                ''.join(format(byte, '08b') for byte in chunk) for chunk in rs_encoded_chunks)
+            print(f"Message binary: {message_binary_debug[:100]}...")
+
+        # Prepare header
+        header = bytearray()
+        header.extend(message_length.to_bytes(4, 'big'))
+        header.extend((100).to_bytes(2, 'big'))  # Parity bytes per chunk
+        header.extend(chunk_count.to_bytes(2, 'big'))  # Number of chunks
+        header_rs = RSCodec(64)
+        header_encoded = header_rs.encode(header)
+
+        if debug_embed:
+            header_binary_debug = ''.join(format(byte, '08b') for byte in header_encoded)
+            print(f"Embedded header binary: {header_binary_debug}")
+            print(f"Header encoded bytes: {[hex(b) for b in header_encoded]}")
+
+        if progress_signal:
+            try:
+                progress_signal.emit(50)  # Embedding message
+            except Exception as e:
+                if debug_embed:
+                    print(f"Progress signal error: {str(e)}")
+
+        # Convert to binary
+        header_binary = ''.join(format(byte, '08b') for byte in header_encoded)
+        message_binary = ''.join(''.join(format(byte, '08b') for byte in chunk) for chunk in rs_encoded_chunks)
+        total_binary = header_binary + message_binary
+
+        if file_ext == '.wav':
+            with wave.open(abs_path, 'rb') as wav_file:
+                params = wav_file.getparams()
+                sample_width = wav_file.getsampwidth()
+                if sample_width != 2:
+                    raise ValueError("Only 16-bit WAV files are supported.")
+                samples = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype=np.int16)
+
+            # Check sample availability and complexity
+            total_samples_needed = 4000 + len(total_binary)
+            if total_samples_needed > len(samples):
+                raise ValueError(f"Audio file too short: need {total_samples_needed} samples, have {len(samples)}")
+            if debug_embed:
+                block = samples[4000:min(6000, len(samples))]
+                complexity = np.std(block)
+                print(f"Complexity at sample 4000: {complexity}")
+                if complexity < 100:
+                    print("Warning: Low audio complexity may increase MP3 errors")
+
+            # Embed header and message with fixed 1-bit LSB
+            modified_samples = samples.copy()
+            start_sample = 4000
+            bits_embedded = 0
+            for i, bit in enumerate(total_binary):
+                modified_samples[start_sample + i] &= ~1
+                modified_samples[start_sample + i] |= int(bit)
+                bits_embedded += 1
+
+            if debug_embed:
+                print(f"Embedded {bits_embedded} bits from sample {start_sample} to {start_sample + bits_embedded - 1}")
+                print(f"Header bits: {len(header_binary)}, Message bits: {len(message_binary)}")
+                print(f"Total samples used: {start_sample + bits_embedded}")
+
+            if bits_embedded < len(total_binary):
+                raise ValueError(f"Could only embed {bits_embedded}/{len(total_binary)} bits.")
+
+            if progress_signal:
+                try:
+                    progress_signal.emit(80)  # Saving audio
+                except Exception as e:
+                    if debug_embed:
+                        print(f"Progress signal error: {str(e)}")
+
+            output_path = os.path.join(os.path.dirname(abs_path), f"encrypted_{os.path.basename(abs_path)}")
+            with wave.open(output_path, 'wb') as wav_out:
+                wav_out.setparams(params)
+                wav_out.writeframes(modified_samples.tobytes())
+
+        else:
+            audio = AudioSegment.from_mp3(abs_path)
+            if audio.sample_width != 2:
+                raise ValueError("Only 16-bit MP3 files are supported.")
+            samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
+
+            # Check sample availability and complexity
+            total_samples_needed = 4000 + len(total_binary)
+            if total_samples_needed > len(samples):
+                raise ValueError(f"Audio file too short: need {total_samples_needed} samples, have {len(samples)}")
+            if debug_embed:
+                block = samples[4000:min(6000, len(samples))]
+                complexity = np.std(block)
+                print(f"Complexity at sample 4000: {complexity}")
+                if complexity < 100:
+                    print("Warning: Low audio complexity may increase MP3 errors")
+
+            # Embed header and message with fixed 1-bit LSB
+            modified_samples = samples.copy()
+            start_sample = 4000
+            bits_embedded = 0
+            for i, bit in enumerate(total_binary):
+                modified_samples[start_sample + i] &= ~1
+                modified_samples[start_sample + i] |= int(bit)
+                bits_embedded += 1
+
+            if debug_embed:
+                print(f"Embedded {bits_embedded} bits from sample {start_sample} to {start_sample + bits_embedded - 1}")
+                print(f"Header bits: {len(header_binary)}, Message bits: {len(message_binary)}")
+                print(f"Total samples used: {start_sample + bits_embedded}")
+
+            if bits_embedded < len(total_binary):
+                raise ValueError(f"Could only embed {bits_embedded}/{len(total_binary)} bits.")
+
+            if progress_signal:
+                try:
+                    progress_signal.emit(80)  # Saving audio
+                except Exception as e:
+                    if debug_embed:
+                        print(f"Progress signal error: {str(e)}")
+
+            modified_audio = AudioSegment(
+                modified_samples.tobytes(),
+                frame_rate=audio.frame_rate,
+                sample_width=audio.sample_width,
+                channels=audio.channels
+            )
+
+            output_path = os.path.join(os.path.dirname(abs_path), f"encrypted_{os.path.basename(abs_path)}")
+            modified_audio.export(output_path, format="mp3", bitrate="320k")
+
+        if progress_signal:
+            try:
+                progress_signal.emit(100)  # Encryption complete
+            except Exception as e:
+                if debug_embed:
+                    print(f"Progress signal error: {str(e)}")
+
+        return output_path
+
+    def extract_audio_message(self, audio_path: str, password: str = None, progress_callback=None) -> str:
+        """Extract a message from a WAV or MP3 file using fixed 1-bit LSB with Reed-Solomon.
+
+        Args:
+            audio_path: Path to audio file.
+            password: Optional password for AES decryption.
+            progress_callback: Optional callback for progress updates.
+
+        Returns:
+            Extracted message or error string.
+        """
+        abs_path = os.path.abspath(audio_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"Audio file not found at {abs_path}")
+
+        file_ext = os.path.splitext(abs_path)[1].lower()
+        if file_ext not in ('.wav', '.mp3'):
+            raise ValueError(f"Unsupported audio format: {file_ext}")
+
+        if progress_callback:
+            try:
+                progress_callback(10)  # Loading audio
+            except Exception as e:
+                if debug_extract:
+                    print(f"Progress callback error: {str(e)}")
+
+        # Load samples
+        if file_ext == '.wav':
+            with wave.open(abs_path, 'rb') as wav_file:
+                sample_width = wav_file.getsampwidth()
+                if sample_width != 2:
+                    raise ValueError("Only 16-bit WAV files are supported.")
+                samples = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype=np.int16)
+        else:
+            audio = AudioSegment.from_mp3(abs_path)
+            if audio.sample_width != 2:
+                raise ValueError("Only 16-bit MP3 files are supported.")
+            samples = np.array(audio.get_array_of_samples(), dtype=np.int16)
+
+        if debug_extract:
+            print(f"Total samples available: {len(samples)}")
+
+        if progress_callback:
+            try:
+                progress_callback(30)  # Extracting header
+            except Exception as e:
+                if debug_extract:
+                    print(f"Progress callback error: {str(e)}")
+
+        # Extract header (8 bytes + 64 parity = 72 bytes = 576 bits)
+        header_rs = RSCodec(64)
+        header_bits = 72 * 8
+        header_binary = []
+        start_sample = 4000
+        for i in range(header_bits):
+            if start_sample + i >= len(samples):
+                if progress_callback:
+                    progress_callback(-1)
+                return "INVALID_LENGTH"
+            bit = samples[start_sample + i] & 1
+            header_binary.append(str(bit))
+        header_binary = ''.join(header_binary)
+
+        if debug_extract:
+            print(f"Raw header binary: {header_binary}")
+            print(f"Header binary length: {len(header_binary)}")
+
+        header_bytes = bytearray()
+        for i in range(0, len(header_binary), 8):
+            byte = header_binary[i:i + 8]
+            if len(byte) == 8:
+                header_bytes.append(int(byte, 2))
 
         try:
-            # Convert to absolute path and verify existence
-            abs_path = os.path.abspath(image_path)
-            if not os.path.exists(abs_path):
-                raise FileNotFoundError(f"Image file not found at {abs_path}")
+            header_decoded = header_rs.decode(header_bytes)
+            if isinstance(header_decoded, tuple):
+                header_decoded = header_decoded[0]
+            if debug_extract:
+                corrected = header_rs.encode(header_decoded)
+                corrections = sum(a != b for a, b in zip(header_bytes, corrected))
+                print(f"Header RS corrections: {corrections}")
+                print(f"Decoded header bytes: {[hex(b) for b in header_decoded]}")
+                embedded_binary = ''.join(format(byte, '08b') for byte in header_rs.encode(header_decoded))
+                bit_errors = sum(a != b for a, b in zip(embedded_binary, header_binary))
+                print(f"Header bit errors: {bit_errors}")
+            message_length = int.from_bytes(header_decoded[:4], 'big')
+            parity_bytes = int.from_bytes(header_decoded[4:6], 'big')
+            chunk_count = int.from_bytes(header_decoded[6:8], 'big')
+        except ReedSolomonError as e:
+            if debug_extract:
+                print(f"Header RS decode error: {str(e)}")
+            if progress_callback:
+                progress_callback(-1)
+            return "HEADER_RS_DECODE_FAILED"
+        except (ValueError, IndexError) as e:
+            if debug_extract:
+                print(f"Header parse error: {str(e)}")
+            if progress_callback:
+                progress_callback(-1)
+            return "INVALID_LENGTH"
 
+        if progress_callback:
+            try:
+                progress_callback(50)  # Decoding message
+            except Exception as e:
+                if debug_extract:
+                    print(f"Progress callback error: {str(e)}")
+
+        # Extract RS-encoded message chunks
+        rs = RSCodec(parity_bytes)
+        chunk_size_bytes = 50 + parity_bytes
+        rs_binary = []
+        message_start = start_sample + header_bits
+        for i in range(chunk_count * chunk_size_bytes * 8):
+            if message_start + i >= len(samples):
+                if progress_callback:
+                    progress_callback(-1)
+                return "NO_MESSAGE_FOUND"
+            bit = samples[message_start + i] & 1
+            rs_binary.append(str(bit))
+        rs_binary = ''.join(rs_binary)
+
+        if debug_extract:
+            print(
+                f"Extracting message from sample {message_start} to {message_start + chunk_count * chunk_size_bytes * 8 - 1}")
+            print(f"Raw message binary: {rs_binary[:100]}...")
+            print(f"Message binary length: {len(rs_binary)}")
+
+        # Split into chunks
+        rs_bytes_chunks = []
+        for i in range(0, len(rs_binary), chunk_size_bytes * 8):
+            chunk_binary = rs_binary[i:i + chunk_size_bytes * 8]
+            chunk_bytes = bytearray()
+            for j in range(0, len(chunk_binary), 8):
+                byte = chunk_binary[j:j + 8]
+                if len(byte) == 8:
+                    chunk_bytes.append(int(byte, 2))
+            rs_bytes_chunks.append(chunk_bytes)
+
+        # Decode each chunk
+        decoded_bytes = bytearray()
+        for i, chunk_bytes in enumerate(rs_bytes_chunks):
+            try:
+                chunk_decoded = rs.decode(chunk_bytes)
+                if isinstance(chunk_decoded, tuple):
+                    chunk_decoded = chunk_decoded[0]
+                if debug_extract:
+                    corrected = rs.encode(chunk_decoded)
+                    corrections = sum(a != b for a, b in zip(chunk_bytes, corrected))
+                    print(f"Chunk {i} RS corrections: {corrections}")
+                    embedded_binary = ''.join(format(byte, '08b') for byte in rs.encode(chunk_decoded))
+                    bit_errors = sum(a != b for a, b in zip(embedded_binary, rs_binary[i:i + chunk_size_bytes * 8]))
+                    print(f"Chunk {i} bit errors: {bit_errors}")
+                decoded_bytes.extend(chunk_decoded[:min(len(chunk_decoded), message_length - len(decoded_bytes))])
+            except ReedSolomonError as e:
+                if debug_extract:
+                    print(f"Chunk {i} RS decode error: {str(e)}")
+                    embedded_binary = ''.join(format(byte, '08b') for byte in chunk_bytes)
+                    bit_errors = sum(a != b for a, b in zip(embedded_binary, rs_binary[i:i + chunk_size_bytes * 8]))
+                    print(f"Chunk {i} bit errors (failed): {bit_errors}")
+                if progress_callback:
+                    progress_callback(-1)
+                return "RS_DECODE_FAILED"
+
+        # Trim to message_length
+        decoded_bytes = decoded_bytes[:message_length]
+
+        if progress_callback:
+            try:
+                progress_callback(80)  # Verifying
+            except Exception as e:
+                if debug_extract:
+                    print(f"Progress callback error: {str(e)}")
+
+        # Convert bytes to string
+        try:
+            extracted = decoded_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            if progress_callback:
+                progress_callback(-1)
+            return "DECODE_ERROR"
+
+        if self.START_CHAR not in extracted or self.STOP_CHAR not in extracted:
+            if progress_callback:
+                progress_callback(-1)
+            return "NO_MESSAGE_FOUND"
+
+        start_idx = extracted.find(self.START_CHAR) + 1
+        stop_idx = extracted.find(self.STOP_CHAR)
+        checksum = extracted[start_idx:start_idx + self.CHECKSUM_LENGTH]
+        message_content = extracted[start_idx + self.CHECKSUM_LENGTH:stop_idx]
+
+        if self._calculate_checksum(message_content) != checksum:
+            if progress_callback:
+                progress_callback(-1)
+            return "INVALID_CHECKSUM"
+
+        if message_content.startswith("AES"):
+            if not password:
+                if progress_callback:
+                    progress_callback(-1)
+                return "PASSWORD_REQUIRED"
+            decrypted = self._aes_decrypt(message_content, password)
+            if not decrypted:
+                if progress_callback:
+                    progress_callback(-1)
+                return "DECRYPTION_FAILED"
+            return decrypted
+
+        if progress_callback:
+            try:
+                progress_callback(100)  # Decryption complete
+            except Exception as e:
+                if debug_extract:
+                    print(f"Progress callback error: {str(e)}")
+
+        return message_content
+    # ------------------ Optimized Hybrid Steganography Functions ------------------
+
+    def hybrid_embed_message(self, image_path: str, message: str, password: str = None, progress_signal=None) -> str:
+        """Embed a message into an image or audio file.
+
+        Args:
+            image_path: Path to input image or audio file.
+            message: Message to embed.
+            password: Optional password for AES encryption.
+            progress_signal: Optional signal for progress updates (images only).
+
+        Returns:
+            Path to the output file.
+        """
+        abs_path = os.path.abspath(image_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found at {abs_path}")
+
+        file_ext = os.path.splitext(abs_path)[1].lower()
+
+        if file_ext in ('.wav', '.mp3'):
+            return self.embed_audio_message(abs_path, message, password)
+
+        # Existing image embedding code follows...
+        temp_png_path = ""
+        try:
+            # Convert to absolute path and verify existence
             if progress_signal:
                 try:
                     progress_signal.emit(5)  # Starting
@@ -495,10 +1051,9 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
 
-            # Read Exif (cv2 do not support it)
+            # Read Exif (cv2 does not support it)
             with Image.open(image_path) as img:
                 exif_data = img.getexif().tobytes() if hasattr(img, 'getexif') else None
 
@@ -530,8 +1085,8 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
+
             # Vectorized binary conversion
             binary_message = ''.join(format(ord(char), '08b') for char in full_message)
             message_length = len(binary_message)
@@ -550,7 +1105,6 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
 
             # Embed message using DCT
@@ -560,7 +1114,6 @@ class StegaMachine:
             if embedded_bits < message_length:
                 raise ValueError("Could not embed entire message. Try a larger image.")
 
-            # Progress bar updates
             if progress_signal:
                 try:
                     progress_signal.emit(50)
@@ -570,7 +1123,6 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
 
             original_dir = os.path.dirname(abs_path)
@@ -587,7 +1139,6 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
 
             # Always embed to PNG first (temporary if original isn't PNG)
@@ -603,14 +1154,12 @@ class StegaMachine:
                     try:
                         progress_signal.emit(-1)
                     except:
-                        # Last resort - can't even send error code
                         pass
 
             # Case 1: Original is PNG -> Keep PNG output
             if original_ext == '.png':
                 final_path = os.path.join(original_dir, f"encrypted_{base_name}.png")
                 os.replace(temp_png_path, final_path)  # Atomic rename
-
                 if progress_signal:
                     try:
                         progress_signal.emit(100)
@@ -620,16 +1169,12 @@ class StegaMachine:
                         try:
                             progress_signal.emit(-1)
                         except:
-                            # Last resort - can't even send error code
                             pass
-
                 return final_path
 
             # Case 2: Original is JPEG/BMP/WEBP -> Convert back to original format
             else:
                 final_path = os.path.join(original_dir, f"encrypted_{base_name}{original_ext}")
-
-                # High-quality conversion for JPEG
                 if original_ext in ('.jpg', '.jpeg'):
                     save_args = {
                         'format': 'JPEG',
@@ -639,8 +1184,6 @@ class StegaMachine:
                     if exif_data is not None:
                         save_args['exif'] = exif_data
                     Image.open(temp_png_path).save(final_path, **save_args)
-
-                # Lossless conversion for WebP
                 elif original_ext == '.webp':
                     save_args = {
                         'format': 'WEBP',
@@ -649,22 +1192,17 @@ class StegaMachine:
                     if exif_data is not None:
                         save_args['exif'] = exif_data
                     Image.open(temp_png_path).save(final_path, **save_args)
-                # Lossless conversion for AVIF
                 elif original_ext == '.avif':
                     save_args = {
-                    'format': 'AVIF',
-                    'lossless': True,
-                }
+                        'format': 'AVIF',
+                        'lossless': True,
+                    }
                     if exif_data is not None:
                         save_args['exif'] = exif_data
                     Image.open(temp_png_path).save(final_path, **save_args)
-
-                # Default conversion for other formats (e.g., BMP)
                 else:
                     Image.open(temp_png_path).save(final_path)
-
                 os.remove(temp_png_path)  # Clean up temporary PNG
-
                 if progress_signal:
                     try:
                         progress_signal.emit(100)
@@ -674,22 +1212,36 @@ class StegaMachine:
                         try:
                             progress_signal.emit(-1)
                         except:
-                            # Last resort - can't even send error code
                             pass
-
                 return final_path
 
-
         except Exception as e:
-            # Clean up temp file if something failed
             if 'temp_png_path' in locals() and os.path.exists(temp_png_path):
                 os.remove(temp_png_path)
                 if progress_signal:
                     progress_signal.emit(-1)
             raise e
 
-    def hybrid_extract_message(self, image_path, password=None, progress_callback=None):
-        """Optimized extraction with progress reporting"""
+    def hybrid_extract_message(self, image_path: str, password: str = None, progress_callback=None) -> str:
+        """Extract a message from an image or audio file.
+
+        Args:
+            image_path: Path to image or audio file.
+            password: Optional password for AES decryption.
+            progress_callback: Optional callback for progress updates (images only).
+
+        Returns:
+            Extracted message or error string.
+        """
+        abs_path = os.path.abspath(image_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found at {abs_path}")
+
+        file_ext = os.path.splitext(abs_path)[1].lower()
+
+        if file_ext in ('.wav', '.mp3'):
+            return self.extract_audio_message(abs_path, password)
+
         try:
             # Load image with OpenCV for better performance
             cv_img = cv2.imread(image_path)
@@ -702,15 +1254,16 @@ class StegaMachine:
             # Convert to PIL for compatibility with rest of code
             img = Image.fromarray(cv_img_rgb)
 
-            # Progress update
             if progress_callback:
                 progress_callback(10)  # Length
 
             # First extract the message length using Adaptive LSB
             length_binary = self.adaptive_lsb_extract(img, 32)
-            message_length = int(length_binary, 2)
+            try:
+                message_length = int(length_binary, 2)
+            except ValueError:
+                return "INVALID_LENGTH"
 
-            # Progress update
             if progress_callback:
                 progress_callback(30)  # Analyzing DCT...
 
@@ -725,17 +1278,15 @@ class StegaMachine:
                     chars.append(chr(int(byte, 2)))
             extracted = ''.join(chars)
 
-            # Progress update
             if progress_callback:
                 progress_callback(50)  # Characters decoded
 
             if self.START_CHAR not in extracted or self.STOP_CHAR not in extracted:
-                return None
+                return "NO_MESSAGE_FOUND"
 
             start_idx = extracted.find(self.START_CHAR) + 1
             stop_idx = extracted.find(self.STOP_CHAR)
 
-            # Progress update
             if progress_callback:
                 progress_callback(80)  # Verifying
 
@@ -761,5 +1312,5 @@ class StegaMachine:
                 progress_callback(-1)  # Error indicator
             if debug_extract:
                 print(f"Extraction error: {str(e)}")
-            return None
+            return f"EXTRACTION_ERROR: {str(e)}"
 

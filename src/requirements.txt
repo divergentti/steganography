@@ -6,3 +6,6 @@ PyQt6==6.9.0
 PyQt6-Qt6==6.9.0
 PyQt6_sip==13.10.0
 scipy==1.15.2
+
+pydub~=0.25.1
+reedsolo~=1.7.0
