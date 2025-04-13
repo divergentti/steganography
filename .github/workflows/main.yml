@@ -18,6 +18,12 @@ jobs:
       - name: Verify file path
         run: |
           Get-ChildItem -Recurse
+          if (Test-Path -Path "src\Stegatool-v0-1-1.py") {
+              Write-Output "File exists"
+          } else {
+              Write-Output "File does not exist"
+              exit 1
+          }
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -55,7 +61,12 @@ jobs:
       - name: Verify file path
         run: |
           find .
-          ls -la src/Stegatool-v0-1-1.py
+          if [ -f "src/Stegatool-v0-1-1.py" ]; then
+              echo "File exists"
+          else
+              echo "File does not exist"
+              exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
