@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka src\Stegatool-v0-1-1.py --standalone --onefile --windows-disable-console --enable-plugin=pyqt6 --output-dir=build --lto=yes --follow-imports
+          nuitka --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=build --windows-console-mode=disable src\Stegatool-v0-1-1.py
 
       - name: Upload .exe as artifact
         uses: actions/upload-artifact@v4
@@ -60,7 +60,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -71,7 +71,7 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka src/Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=build --lto=yes --follow-imports
+          nuitka --standalone --onefile --enable-plugin=pyqt6 --output-dir=build --lto=yes --follow-imports src/Stegatool-v0-1-1.py
 
       - name: Verify build directory
         run: |
