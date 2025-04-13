@@ -105,4 +105,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: Stegatool-v0-1-1-x86_64.AppImage
-
