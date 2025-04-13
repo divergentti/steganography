@@ -28,11 +28,29 @@ jobs:
         run: |
           pip install nuitka
           pip install pyqt6 pillow numpy opencv-python scipy reedsolo pydub pycryptodome
+      - name: Download dependency walker manually
+        shell: powershell
+        run: |
+          $dependsUrl = "https://dependencywalker.com/depends22_x64.zip"
+          $downloadPath = "depends22_x64.zip"
+          $extractPath = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          
+          # Create directories if they don't exist
+          New-Item -Path $extractPath -ItemType Directory -Force
+          
+          # Download the file
+          Invoke-WebRequest -Uri $dependsUrl -OutFile $downloadPath
+          
+          # Extract the archive
+          Expand-Archive -Path $downloadPath -DestinationPath $extractPath -Force
+          
+          # Verify files were extracted
+          Get-ChildItem -Path $extractPath
       - name: Build with Nuitka
         shell: cmd
         run: |
           cd src
-          python -m nuitka Stegatool-v0-1-1.py --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=..\build --windows-disable-console
+          python -m nuitka Stegatool-v0-1-1.py --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=..\build --windows-console-mode=disable --assume-yes-for-downloads
       - name: Upload .exe as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -71,7 +89,7 @@ jobs:
       - name: Build with Nuitka
         run: |
           cd src
-          python -m nuitka Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=../build --lto=yes --follow-imports
+          python -m nuitka Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=../build --lto=yes --follow-imports --assume-yes-for-downloads
       - name: Verify build output
         run: |
           ls -la build/
@@ -80,10 +98,6 @@ jobs:
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage --appimage-extract
-      - name: Debug AppDir structure before creation
-        run: |
-          pwd
-          ls -la
       - name: Create AppDir structure
         run: |
           # Create basic structure
@@ -99,7 +113,7 @@ jobs:
           EOF
           chmod +x AppDir/AppRun
           
-          # Create desktop entry - IMPORTANT: Must be named the same as the AppDir
+          # Create desktop entry in root directory
           cat > AppDir/stegatool.desktop << EOF
           [Desktop Entry]
           Name=Stegatool
@@ -109,8 +123,7 @@ jobs:
           Categories=Utility;
           EOF
           
-          # Create icon directory and icon
-          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          # Create icon directly in root directory
           convert -size 256x256 xc:white -fill black -pointsize 24 -gravity center -annotate 0 "Stegatool" AppDir/stegatool.png
           
           # Debug: List the AppDir structure to verify
