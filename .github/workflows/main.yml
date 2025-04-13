@@ -1,20 +1,16 @@
 name: Build Nuitka EXE for Windows and Linux AppImage
-
 on:
   push:
     branches:
       - main
   release:
     types: [created]
-
 jobs:
   build-windows:
     runs-on: windows-latest
-
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
       - name: Verify file path
         run: |
           Get-ChildItem -Recurse
@@ -24,28 +20,24 @@ jobs:
               Write-Output "File does not exist"
               exit 1
           }
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
         run: |
           pip install nuitka
           pip install pyqt6 pillow numpy opencv-python scipy reedsolo pydub pycryptodome
-
       - name: Build with Nuitka
+        shell: cmd
         run: |
           cd src
-          nuitka Stegatool-v0-1-1.py --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=../build --windows-console-mode=disable
-
+          python -m nuitka Stegatool-v0-1-1.py --standalone --lto=yes --onefile --follow-imports --enable-plugin=pyqt6 --output-dir=..\build --windows-disable-console
       - name: Upload .exe as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Stegatool-Windows
           path: build/Stegatool-v0-1-1.exe
-
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
@@ -54,11 +46,9 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
-
       - name: Verify file path
         run: |
           find .
@@ -68,47 +58,53 @@ jobs:
               echo "File does not exist"
               exit 1
           fi
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y patchelf desktop-file-utils libgirepository1.0-dev
           pip install nuitka
           pip install pyqt6 pillow numpy opencv-python scipy reedsolo pydub pycryptodome
-
       - name: Build with Nuitka
         run: |
           cd src
-          nuitka Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=../build --lto=yes --follow-imports
-
-      - name: Verify build directory
+          python -m nuitka Stegatool-v0-1-1.py --standalone --onefile --enable-plugin=pyqt6 --output-dir=../build --lto=yes --follow-imports
+      - name: Verify build output
         run: |
-          ls -la ../build
-
+          ls -la build/
       - name: Download appimagetool
         run: |
           wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
-
       - name: Create AppImage
         run: |
-          ./appimagetool-x86_64.AppImage ../build/Stegatool-v0-1-1
-
-      - name: Verify AppImage
-        run: |
-          ls -la
-
+          mkdir -p AppDir
+          cp build/Stegatool-v0-1-1.bin AppDir/AppRun
+          chmod +x AppDir/AppRun
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Create desktop entry
+          echo "[Desktop Entry]
+          Type=Application
+          Name=Stegatool
+          Exec=AppRun
+          Icon=stegatool
+          Categories=Utility;" > AppDir/usr/share/applications/stegatool.desktop
+          
+          # Create a simple icon if you don't have one
+          convert -size 256x256 xc:transparent -fill black -draw "text 30,128 'Stegatool'" AppDir/usr/share/icons/hicolor/256x256/apps/stegatool.png || echo "No icon created, continuing anyway"
+          
+          # Create AppImage
+          ./appimagetool-x86_64.AppImage AppDir Stegatool-v0-1-1-x86_64.AppImage
       - name: Upload AppImage as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Stegatool-Linux
           path: Stegatool-v0-1-1-x86_64.AppImage
-
       - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
