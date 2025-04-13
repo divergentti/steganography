@@ -4,6 +4,12 @@ A powerful, user-friendly tool for hiding and extracting secret messages in imag
 
 © 2025 Jari Hiltunen / Divergentti - Licensed under MIT.
 
+Videos: 
+[version 0.0.2](https://youtu.be/oEhgSjQLx94)
+[Release candidate](https://youtu.be/ssrKwqr9QbU)
+[First release](https://youtu.be/1xZide8MJ7U)
+[Release 0.1.1](https://youtu.be/oeHNhV9OSxs)
+
 ## Features
 
 - **Image Support**: Embed/extract messages in PNG, JPG, JPEG, BMP, and WEBP using hybrid LSB + DCT methods.
@@ -37,9 +43,11 @@ A powerful, user-friendly tool for hiding and extracting secret messages in imag
 
 Requirements: Python 3.8+, tested on Windows and Linux.
 
+## Using compiled binaries
+
 Using binaries (one file runnable made with Nuitka and Github Actions workflows):
 
-    Download proper zip-version from releases https://github.com/divergentti/steganography/releases/tag/steganography
+    Download proper zip-version from [releases](https://github.com/divergentti/steganography/releases/tag/steganography)
     Linux AppImage: change chmod +x if needed
    
     Note: Download binaries as raw files from the GitHub repository.
