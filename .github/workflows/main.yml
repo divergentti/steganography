@@ -15,6 +15,10 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v4
 
+      - name: Verify file path
+        run: |
+          Get-ChildItem -Recurse
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -27,7 +31,7 @@ jobs:
 
       - name: Build with Nuitka
         run: |
-          nuitka src/Stegatool-v0-1-1.py `
+          nuitka src\Stegatool-v0-1-1.py `
             --standalone `
             --onefile `
             --windows-disable-console `
@@ -54,6 +58,10 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
+
+      - name: Verify file path
+        run: |
+          find .
 
       - name: Set up Python
         uses: actions/setup-python@v5
