@@ -5,9 +5,13 @@ A powerful, user-friendly tool for hiding and extracting secret messages in imag
 © 2025 Jari Hiltunen / Divergentti - Licensed under MIT.
 
 Videos: 
+
 [version 0.0.2](https://youtu.be/oEhgSjQLx94)
+
 [Release candidate](https://youtu.be/ssrKwqr9QbU)
+
 [First release](https://youtu.be/1xZide8MJ7U)
+
 [Release 0.1.1](https://youtu.be/oeHNhV9OSxs)
 
 ## Features
