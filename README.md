@@ -53,7 +53,11 @@ Using binaries (one file runnable made with Nuitka and Github Actions workflows)
 
  Download proper zip-version from [releases](https://github.com/divergentti/steganography/releases/tag/steganography)
 
-Linux AppImage: change chmod +x if needed
+Linux AppImage: change chmod +x if needed.
+
+Windows 11 Defender needs some tweaking before downloading or running the .exe – otherwise, it'll throw a false positive virus alert. 
+
+Gotta love how Microsoft handles open source... even though they own GitHub!
 
 ## Usage
 
