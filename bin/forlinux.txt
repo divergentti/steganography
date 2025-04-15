@@ -1,1 +1,5 @@
-Binary is replaced with a workflow, which will make an Appimage for you.
+Binary is replaced with a workflow, which will make an Appimage for you to the Releases page.
+
+Download the zip from https://github.com/divergentti/steganography/releases 
+
+Enjoy!

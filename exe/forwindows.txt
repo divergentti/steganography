@@ -1,1 +1,7 @@
-Exe is replaced with Github workflow, which will make latest versio for you.
+The .exe is now replaced with a GitHub workflow that builds the latest version for you.
+However, Windows 11 Defender may report a false positive for Nuitka-compiled executables.
+To avoid issues, please add an exception in your Defender settings before downloading.
+
+Download the ZIP from: https://github.com/divergentti/steganography/releases
+
+Enjoy!
